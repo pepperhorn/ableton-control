@@ -2,13 +2,7 @@
 <html class="spike-document"><head class="spike-head"><meta class="spike-charset" charset="utf-8"><meta class="spike-viewport" name="viewport" content="width=device-width,initial-scale=1"><title class="spike-title">Touch test</title>
 <style class="spike-style">body{margin:0;padding:24px;background:#18191d;color:white;font:20px sans-serif} .touch-target{height:45vh;background:#666;display:grid;place-items:center;touch-action:pan-y} .touch-target.is-hit{background:#22a75a} .touch-log{height:35vh;overflow:auto;white-space:pre-wrap;font-size:14px}</style></head>
 <body class="spike-body"><h1 class="spike-heading">Pointer event test</h1><div class="touch-target">Clean tap here</div><pre class="touch-log" aria-live="polite"></pre><script class="spike-script" type="module">
-function createTapDetector(){
- const pointers=new Map();let blocked=false;
- return {down(id,x,y,t,target){if(pointers.size)blocked=true;pointers.set(id,{x,y,t,target,moved:false});},
- move(id,x,y){const p=pointers.get(id);if(p&&Math.hypot(x-p.x,y-p.y)>=10)p.moved=true;},
- up(id,x,y,t,target){const p=pointers.get(id);const hit=p&&!blocked&&!p.moved&&Math.hypot(x-p.x,y-p.y)<10&&t-p.t<500&&p.target===target?target:null;pointers.delete(id);if(!pointers.size)blocked=false;return hit;},
- cancel(id){pointers.delete(id);if(!pointers.size)blocked=false;}};
-}
+import {createTapDetector} from './js/tap.js';
 const detector=createTapDetector(),target=document.querySelector('.touch-target'),log=document.querySelector('.touch-log');
 for(const type of ['pointerdown','pointermove','pointerup','pointercancel'])document.addEventListener(type,e=>{
  log.textContent=JSON.stringify({event:type,pointerType:e.pointerType,pointerId:e.pointerId,x:e.clientX,y:e.clientY})+'\n'+log.textContent.slice(0,12000);

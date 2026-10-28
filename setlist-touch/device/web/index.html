@@ -1,1 +1,36 @@
-<!doctype html><html class="touch-document"><head class="touch-head"><meta class="touch-charset" charset="utf-8"><title class="touch-title">Setlist Touch</title></head><body class="touch-body"><h1 class="placeholder">Setlist Touch</h1></body></html>
+<!doctype html>
+<html class="setlist-document" lang="en">
+<head class="setlist-head">
+<meta class="setlist-charset" charset="utf-8">
+<meta class="setlist-viewport" name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title class="setlist-page-title">Setlist Touch</title>
+<link class="setlist-styles" rel="stylesheet" href="/style.css">
+</head>
+<body class="setlist-body">
+<div class="connection-bar" role="status">Reconnecting…</div>
+<header class="setlist-header">
+<button class="sidebar-toggle" type="button" aria-controls="setlist-sidebar">☰ Setlist</button>
+<button class="song-nav song-nav-prev" type="button"></button>
+<h1 class="song-title">Setlist Touch</h1>
+<button class="song-nav song-nav-next" type="button"></button>
+<button class="lock-toggle" type="button" aria-pressed="false">Lock</button>
+<a class="settings-link" href="#settings" hidden aria-label="Settings">⚙</a>
+</header>
+<main class="setlist-main">
+<aside class="setlist-sidebar" id="setlist-sidebar" aria-label="Setlist">
+<div class="filter-pills" aria-label="Categories"></div><nav class="setlist-songs" aria-label="Songs"></nav>
+</aside>
+<section class="song-panel" aria-label="Song scenes"><div class="scene-list"></div><button class="now-playing-banner" type="button" hidden></button></section>
+</main>
+<section class="settings-panel" hidden>
+<a class="settings-back" href="#">◀ Back to setlist</a><h2 class="settings-heading">Settings</h2>
+<form class="settings-form">
+<label class="settings-label" for="port">Port</label><input class="settings-input" id="port" name="port" type="number" min="1" max="65535" required>
+<label class="settings-label" for="username">Username</label><input class="settings-input" id="username" name="username" autocomplete="username" required>
+<label class="settings-label" for="password">Password</label><input class="settings-input" id="password" name="password" type="password" autocomplete="new-password">
+<p class="settings-hint">Set a password to allow phones and other computers. LAN connections use plain HTTP. Use Tailscale for an encrypted connection.</p>
+<button class="settings-save" type="submit">Save settings</button><p class="settings-status" role="status"></p>
+</form></section>
+<div class="launch-status" role="status" aria-live="polite"></div>
+<script class="setlist-script" type="module" src="/js/app.js"></script>
+</body></html>
