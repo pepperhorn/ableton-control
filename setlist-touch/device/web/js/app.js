@@ -81,7 +81,7 @@ window.addEventListener('blur',cancelGestures);
 document.addEventListener('visibilitychange',cancelGestures);
 // Space belongs to Live's transport. Suppress browser defaults throughout this
 // page (including focused navigation buttons); no keyboard gesture launches.
-document.addEventListener('keydown',e=>{if(e.key===' ' && !e.target.closest('input,textarea,select'))e.preventDefault();},{capture:true});
+document.addEventListener('keydown',e=>{if(e.key===' ' && !(e.target instanceof Element && e.target.closest('input,textarea,select')))e.preventDefault();},{capture:true});
 $('.scene-list').addEventListener('mousedown',e=>e.preventDefault());
 new ResizeObserver(fitSceneRows).observe($('.scene-list'));
 const events = new EventSource('/api/events');
@@ -91,7 +91,7 @@ events.addEventListener('mix',e=>acceptMix(JSON.parse(e.data)));
 events.addEventListener('level',e=>{
   const level=JSON.parse(e.data), strip=mix.strips.find(s=>s.trackIndex===level.trackIndex);
   if(!strip || !strip.levels[level.returnIndex])return;
-  strip.levels[level.returnIndex]={value:level.value,label:level.label};mixJSON=JSON.stringify(mix);mixUI.updateLevels();
+  strip.levels[level.returnIndex]={value:level.value,label:level.label};mixJSON=JSON.stringify(mix);mixUI.updateLevels(level);
 });
 events.addEventListener('set',e=>{
   const next=JSON.parse(e.data);

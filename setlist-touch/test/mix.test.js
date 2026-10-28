@@ -1,22 +1,22 @@
 const {test} = require('node:test');
 const a = require('node:assert/strict'), fs = require('fs'), vm = require('vm'), path = require('path');
 const device = path.join(__dirname,'../device');
-function harness() {
+function harness({wrapped = false} = {}) {
   const fixture = JSON.parse(JSON.stringify(require('../device/lib/fixture-mix.json')));
   const data = {live_set:{tracks:fixture.tracks.flatMap(t=>['id',100+t.index]),return_tracks:fixture.returns.flatMap(r=>['id',200+r.index])}};
-  for (const r of fixture.returns) data[`live_set return_tracks ${r.index}`]={...r,output_routing_type:JSON.stringify({display_name:r.routedToMain?'Main':'Ext. Out'})};
+  for (const r of fixture.returns) data[`live_set return_tracks ${r.index}`]={...r,output_routing_type:JSON.stringify(wrapped ? {output_routing_type:{display_name:r.routedToMain?'Main':'Ext. Out'}} : {display_name:r.routedToMain?'Main':'Ext. Out'})};
   for (const t of fixture.tracks) {
     data[`live_set tracks ${t.index}`]=t;
     t.sends.forEach((s,j)=>data[`live_set tracks ${t.index} mixer_device sends ${j}`]={...s});
   }
   data['live_set tracks 1'].name='+Kick';
-  const observers=[],tasks=[],dict={},out=[],writes=[],logs=[];
+  const observers=[],apis=[],writeApis=[],failGets={},tasks=[],dict={},out=[],writes=[],logs=[];
   function LiveAPI(cb,p) {
-    this.path=typeof cb==='string'?cb:p;this.id=1;this.callback=typeof cb==='function'?cb:null;
-    this.get=prop=>{if(!(prop in data[this.path]))throw Error(prop);return [data[this.path][prop]].flat();};
+    apis.push(this);this.path=typeof cb==='string'?cb:p;this.id=1;this.callback=typeof cb==='function'?cb:null;
+    this.get=prop=>{const key=this.path+':'+prop;if(failGets[key]>0){failGets[key]--;throw Error('Transient read '+key);}if(!(prop in data[this.path]))throw Error(prop);return [data[this.path][prop]].flat();};
     this.getcount=prop=>data[this.path][prop].length/2;
     this.call=(method,value)=>{a.equal(method,'str_for_value');if(data[this.path].failLabel)throw Error('label');return [data[this.path].label];};
-    this.set=(prop,v)=>{data[this.path][prop]=v;writes.push([this.path,prop,v]);changed(this.path,prop);};
+    this.set=(prop,v)=>{writeApis.push(this);data[this.path][prop]=v;writes.push([this.path,prop,v]);changed(this.path,prop);};
     if(this.callback)observers.push(this);
     Object.defineProperty(this,'property',{get:()=>this._property,set:v=>{this._property=v;if(this.callback&&v)this.callback([v,...this.get(v)]);}});
   }
@@ -26,7 +26,7 @@ function harness() {
   const flush=()=>{for(let pass=0;pass<10;pass++){const pending=tasks.filter(t=>t.scheduled);if(!pending.length)return;for(const task of pending){task.scheduled=false;task.fn();}}throw Error('Task loop');};
   const ctx=vm.createContext({LiveAPI,Task,Dict,outlet:(...args)=>out.push(args),post:msg=>logs.push(msg)});
   vm.runInContext(fs.readFileSync(path.join(device,'mix.js'),'utf8'),ctx);
-  return {ctx,data,observers,tasks,dict,out,writes,logs,changed,flush};
+  return {ctx,data,observers,apis,writeApis,failGets,tasks,dict,out,writes,logs,changed,flush};
 }
 test('mix is lazy, selects literal prefix, reads labels and observes external sends only',()=>{
   const h=harness();a.equal(h.observers.length,0);h.ctx.refresh();h.flush();
@@ -83,4 +83,51 @@ test('Node for Max passes expected names intact and orders level events after th
  handlers.mix();handlers.level(0,2,0.5,'-4.1','dB');await new Promise(r=>setImmediate(r));
  a.equal(events[0][0],'mix');a.deepEqual(JSON.parse(JSON.stringify(events[1])),['level',{trackIndex:0,returnIndex:2,value:0.5,label:'-4.1 dB'}]);
  bridge.setSend(0,2,0.6);a.deepEqual(outlets.find(o=>o[0]==='send'),['send',0,2,0.6,'+ DRUMS','Shaun']);
+});
+
+test('routing unwraps Max LiveAPI JSON-string arrays, including final write validation',()=>{
+ const h=harness({wrapped:true});h.ctx.refresh();
+ const api=h.observers.find(o=>o.path==='live_set return_tracks 2'&&o.property==='name');
+ a.deepEqual(api.get('output_routing_type'),[JSON.stringify({output_routing_type:{display_name:'Ext. Out'}})]);
+ let raw=JSON.parse(h.dict.mix);a.equal(raw.returns[0].routedToMain,true);a.equal(raw.returns[2].routedToMain,false);
+ a.equal(h.observers.filter(o=>o.id&&o.property==='value').length,27);
+ h.ctx.send(0,2,0.6,'+ DRUMS','Shaun');a.equal(h.writes.length,1);
+ for(const [routing,expected] of [
+  [{output_routing_type:{display_name:'Master'}},true],
+  [{output_routing_type:{display_name:'Ext. Out'}},false],
+  [{output_routing_type:null,display_name:'Ext. Out'},null],
+  [{output_routing_type:{}},null],
+  [{display_name:'Ext. Out'},false]
+ ]){h.data['live_set return_tracks 2'].output_routing_type=JSON.stringify(routing);h.changed('live_set return_tracks 2','output_routing_type');h.flush();raw=JSON.parse(h.dict.mix);a.equal(raw.returns[2].routedToMain,expected);}
+});
+test('failed rebuild retries with capped backoff, recovers without an edit and releases partial bindings',()=>{
+ const h=harness();h.failGets['live_set tracks 0:color']=20;h.ctx.refresh();
+ const retry=h.tasks[0];
+ for(const delay of [1000,2000,4000,8000,8000]){
+  a.deepEqual(JSON.parse(h.dict.mix),{returns:[],tracks:[]});
+  a.equal(retry.scheduled,true);a.equal(retry.ms,delay);
+  a.equal(h.apis.filter(api=>api.id).length,3,'only the root and its two observers survive a failed bind');
+  // Root itself is also retained until deletion.
+  retry.scheduled=false;retry.fn();
+ }
+ h.failGets['live_set tracks 0:color']=0;retry.scheduled=false;retry.fn();
+ a.equal(JSON.parse(h.dict.mix).tracks.length,9);a.equal(retry.scheduled,false);
+ h.failGets['live_set tracks 0:color']=1;h.ctx.rebuild();a.equal(retry.ms,1000,'successful recovery resets backoff');
+ h.ctx.notifydeleted();a.equal(h.apis.filter(api=>api.id).length,0);a.ok(h.tasks.every(t=>!t.scheduled));
+});
+test('send reuses observed track/return/parameter objects and releases them on rebind and delete',()=>{
+ const h=harness();h.ctx.refresh();const created=h.apis.length;
+ const sendApi=h.observers.find(o=>o.path==='live_set tracks 0 mixer_device sends 2'&&o.property==='value');
+ for(let i=0;i<20;i++)h.ctx.send(0,2,i/20,'+ DRUMS','Shaun');
+ a.equal(h.apis.length,created);a.equal(h.writes.length,20);a.ok(h.writeApis.every(api=>api===sendApi));
+ const oldApis=h.apis.slice();h.ctx.rebuild();a.equal(sendApi.id,0);a.ok(oldApis.filter(api=>api.path!=='live_set').every(api=>api.id===0));
+ h.ctx.notifydeleted();a.ok(h.apis.every(api=>api.id===0));
+});
+
+test('failed observer subscription is released before retrying the snapshot',()=>{
+ const h=harness();h.failGets['live_set tracks 0:name']=1;h.ctx.refresh();
+ a.deepEqual(JSON.parse(h.dict.mix),{returns:[],tracks:[]});
+ a.equal(h.apis.filter(api=>api.id).length,3);a.equal(h.tasks[0].ms,1000);
+ h.flush();a.equal(JSON.parse(h.dict.mix).tracks.length,9);
+ h.ctx.notifydeleted();a.ok(h.apis.every(api=>api.id===0));
 });

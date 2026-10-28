@@ -1,5 +1,5 @@
 import {createFaderGesture} from './fader.js';
-import {faderValue, valueLabel} from './mix-view.js';
+import {faderValue, valueLabel, createFaderHolds} from './mix-view.js';
 import {canLaunch} from './view-state.js';
 const $ = selector => document.querySelector(selector);
 function el(tag, className, text) {
@@ -10,6 +10,8 @@ function el(tag, className, text) {
 export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, status}) {
   const pointers = new Set(), channels = new Map();
   let gesture = null, dragging = null;
+  const holds = createFaderHolds({onExpire:() => updateLevels()});
+  const keyOf = row => `${row.dataset.trackIndex}:${row.dataset.returnIndex}`;
   function selectedReturn() { return mixOf().returns.find(r => r.name === viewOf().tab); }
   function usable() { return viewOf().page === 'mix' && location.hash !== '#settings' && canLaunch(stateOf()); }
   function currentLevel(row) {
@@ -23,13 +25,14 @@ export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, st
     row.setAttribute('aria-valuenow', String(Math.round(level.value * 100)));
     row.setAttribute('aria-valuetext', valueLabel(level));
   }
-  function updateLevels() {
+  function updateLevels(echo) {
+    if (echo) holds.echo(`${echo.trackIndex}:${echo.returnIndex}`);
     for (const row of document.querySelectorAll('.mix-row'))
-      paint(row, faderValue(currentLevel(row), dragging && dragging.row === row ? dragging.level : null));
+      paint(row, faderValue(currentLevel(row), dragging && dragging.row === row ? dragging.level : null, holds.get(keyOf(row))));
   }
   function cancel() {
     if (gesture) for (const id of pointers) gesture.cancel(id);
-    gesture = null; dragging = null;
+    gesture = null; dragging = null; holds.clear();
     for (const entry of channels.values()) { clearTimeout(entry.timer); entry.pending = null; }
     updateLevels();
     for (const row of document.querySelectorAll('.mix-row')) row.classList.remove('is-dragging');
@@ -106,7 +109,7 @@ export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, st
     if (pointers.size > 1) { cancel(); return; }
     const row = e.target.closest('.mix-row');
     if (!row || !usable() || e.button !== 0) return;
-    const level = currentLevel(row); if (!level) return;
+    const level = holds.get(keyOf(row)) || currentLevel(row); if (!level) return;
     gesture = createFaderGesture({fullScalePx:row.clientWidth});
     gesture.down(e.pointerId,e.clientX,e.clientY,level.value);
     dragging = {id:e.pointerId,row,level};
@@ -128,7 +131,9 @@ export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, st
     if (!gesture || !dragging) return;
     const value = gesture.up(e.pointerId), row = dragging.row;
     if (e.pointerId !== dragging.id) return;
-    if (value !== null && usable()) send(row,value,true);
+    if (value !== null && usable()) {
+      holds.commit(keyOf(row), dragging.level); send(row,value,true);
+    }
     row.classList.remove('is-dragging'); gesture = null; dragging = null; updateLevels();
   });
   document.addEventListener('pointercancel',e => { pointers.delete(e.pointerId); cancel(); });
