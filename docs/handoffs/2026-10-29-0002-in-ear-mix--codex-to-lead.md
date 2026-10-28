@@ -6,7 +6,7 @@
 - **Dispatch:** [lead-to-codex](2026-10-29-0002-in-ear-mix--lead-to-codex.md)
 - **Branch:** `orch/0002-in-ear-mix`
 - **Worktree:** `/home/shaun/.t3/worktrees/m4l-control/t3-1fa7b284`
-- **PR:** draft to be created after committing this return; head branch `orch/0002-in-ear-mix`, base `main`.
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/2 (draft; head `orch/0002-in-ear-mix`, base `main`).
 - **Base commit:** `cf7d724e9d49e5b296d6dd5ef8ac2eb40922b474` (main after phase 1 merge and dispatch docs)
 - **Implementation commit:** `910fabbf10dfb162a70e5ea2903b22be227d6512`
 - **Receiver acknowledgement commit:** `eb364b2`
@@ -95,7 +95,7 @@ Lead acknowledges this return through the ledger; reviewer acknowledgement belon
 ---
 ## Return (implementer → lead)
 - **Outcome:** done within the implementation scope; ready for independent review.
-- **PR:** see metadata above (created after this initial return commit).
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/2 (draft).
 - **Commits:** `eb364b2` acknowledgement, `910fabb` implementation, then return-document commits.
 - **What changed:** complete mix snapshot/level/send pipeline; fixture/dev support; ES5 observer module and deferred device wiring; safe fader UI and preferences; assigned Space/status fixes.
 - **Decisions made:**
