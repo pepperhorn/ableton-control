@@ -9,6 +9,7 @@
 <body class="setlist-body">
 <div class="connection-bar" role="status">Reconnecting…</div>
 <header class="setlist-header">
+<nav class="page-switch" aria-label="Page"><button class="page-choice" data-page="scenes" type="button" aria-pressed="true">Scenes</button><button class="page-choice" data-page="mix" type="button" aria-pressed="false">My mix</button></nav>
 <button class="sidebar-toggle" type="button" aria-controls="setlist-sidebar">☰ Setlist</button>
 <button class="song-nav song-nav-prev" type="button"></button>
 <h1 class="song-title">Setlist Touch</h1>
@@ -22,6 +23,10 @@
 </aside>
 <section class="song-panel" aria-label="Song scenes"><div class="scene-list"></div><button class="now-playing-banner" type="button" hidden></button></section>
 </main>
+<section class="mix-panel" aria-label="In-ear mix" hidden>
+<div class="mix-heading"><h2 class="mix-title">In-ear mix</h2><p class="mix-hint">Slide sideways to adjust · scroll to browse</p></div>
+<nav class="send-tabs" aria-label="Player mixes"></nav><div class="mix-list"></div>
+</section>
 <section class="settings-panel" hidden>
 <a class="settings-back" href="#">◀ Back to setlist</a><h2 class="settings-heading">Settings</h2>
 <a class="touch-test-link" href="/touch-test.html">Touch diagnostic</a>

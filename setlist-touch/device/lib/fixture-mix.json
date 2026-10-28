@@ -1,0 +1,306 @@
+{
+  "returns": [
+    {
+      "index": 0,
+      "name": "A-Verb",
+      "color": 9143740,
+      "routedToMain": true
+    },
+    {
+      "index": 1,
+      "name": "B-Delay",
+      "color": 7713470,
+      "routedToMain": true
+    },
+    {
+      "index": 2,
+      "name": "Shaun",
+      "color": 8502252,
+      "routedToMain": false
+    },
+    {
+      "index": 3,
+      "name": "Keith",
+      "color": 10539931,
+      "routedToMain": false
+    },
+    {
+      "index": 4,
+      "name": "Sam",
+      "color": 14067409,
+      "routedToMain": false
+    }
+  ],
+  "tracks": [
+    {
+      "index": 0,
+      "name": "+ DRUMS",
+      "color": 16095128,
+      "sends": [
+        {
+          "value": 0.42,
+          "label": "-7.5 dB"
+        },
+        {
+          "value": 0.53,
+          "label": "-5.5 dB"
+        },
+        {
+          "value": 0.64,
+          "label": "-3.9 dB"
+        },
+        {
+          "value": 0.75,
+          "label": "-2.5 dB"
+        },
+        {
+          "value": 0.86,
+          "label": "-1.3 dB"
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "name": "+ PERC",
+      "color": 16248188,
+      "sends": [
+        {
+          "value": 0.49,
+          "label": "-6.2 dB"
+        },
+        {
+          "value": 0.6,
+          "label": "-4.4 dB"
+        },
+        {
+          "value": 0.71,
+          "label": "-3.0 dB"
+        },
+        {
+          "value": 0.82,
+          "label": "-1.7 dB"
+        },
+        {
+          "value": 0.48,
+          "label": "-6.4 dB"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "name": "+ Bass",
+      "color": 54940,
+      "sends": [
+        {
+          "value": 0.56,
+          "label": "-5.0 dB"
+        },
+        {
+          "value": 0.67,
+          "label": "-3.5 dB"
+        },
+        {
+          "value": 0.78,
+          "label": "-2.2 dB"
+        },
+        {
+          "value": 0.44,
+          "label": "-7.1 dB"
+        },
+        {
+          "value": 0.55,
+          "label": "-5.2 dB"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "name": "+ COMP",
+      "color": 15916800,
+      "sends": [
+        {
+          "value": 0.63,
+          "label": "-4.0 dB"
+        },
+        {
+          "value": 0.74,
+          "label": "-2.6 dB"
+        },
+        {
+          "value": 0.85,
+          "label": "-1.4 dB"
+        },
+        {
+          "value": 0.51,
+          "label": "-5.8 dB"
+        },
+        {
+          "value": 0.62,
+          "label": "-4.2 dB"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "name": "+ HORNS",
+      "color": 42725,
+      "sends": [
+        {
+          "value": 0.7,
+          "label": "-3.1 dB"
+        },
+        {
+          "value": 0.81,
+          "label": "-1.8 dB"
+        },
+        {
+          "value": 0.47,
+          "label": "-6.6 dB"
+        },
+        {
+          "value": 0.58,
+          "label": "-4.7 dB"
+        },
+        {
+          "value": 0.69,
+          "label": "-3.2 dB"
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "name": "+ OTHER",
+      "color": 42725,
+      "sends": [
+        {
+          "value": 0.77,
+          "label": "-2.3 dB"
+        },
+        {
+          "value": 0.43,
+          "label": "-7.3 dB"
+        },
+        {
+          "value": 0.54,
+          "label": "-5.4 dB"
+        },
+        {
+          "value": 0.65,
+          "label": "-3.7 dB"
+        },
+        {
+          "value": 0.76,
+          "label": "-2.4 dB"
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "name": "+ SAMPLES",
+      "color": 11960772,
+      "sends": [
+        {
+          "value": 0.84,
+          "label": "-1.5 dB"
+        },
+        {
+          "value": 0.5,
+          "label": "-6.0 dB"
+        },
+        {
+          "value": 0.61,
+          "label": "-4.3 dB"
+        },
+        {
+          "value": 0.72,
+          "label": "-2.9 dB"
+        },
+        {
+          "value": 0.83,
+          "label": "-1.6 dB"
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "name": "+ BGs",
+      "color": 39898,
+      "sends": [
+        {
+          "value": 0.46,
+          "label": "-6.7 dB"
+        },
+        {
+          "value": 0.57,
+          "label": "-4.9 dB"
+        },
+        {
+          "value": 0.68,
+          "label": "-3.3 dB"
+        },
+        {
+          "value": 0.79,
+          "label": "-2.0 dB"
+        },
+        {
+          "value": 0.45,
+          "label": "-6.9 dB"
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "name": "+ CLICK",
+      "color": 15945433,
+      "sends": [
+        {
+          "value": 0.53,
+          "label": "-5.5 dB"
+        },
+        {
+          "value": 0.64,
+          "label": "-3.9 dB"
+        },
+        {
+          "value": 0.75,
+          "label": "-2.5 dB"
+        },
+        {
+          "value": 0.86,
+          "label": "-1.3 dB"
+        },
+        {
+          "value": 0.52,
+          "label": "-5.7 dB"
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "name": "+ CUE GROUP",
+      "color": 16030208,
+      "sends": [
+        {
+          "value": 0.6,
+          "label": "-4.4 dB"
+        },
+        {
+          "value": 0.71,
+          "label": "-3.0 dB"
+        },
+        {
+          "value": 0.82,
+          "label": "-1.7 dB"
+        },
+        {
+          "value": 0.48,
+          "label": "-6.4 dB"
+        },
+        {
+          "value": 0.59,
+          "label": "-4.6 dB"
+        }
+      ]
+    }
+  ]
+}

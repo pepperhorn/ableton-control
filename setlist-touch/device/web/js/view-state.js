@@ -7,7 +7,7 @@ export function initialState(prefs = {}) {
 export function currentSong(state, set) { return set.songs.find(song => same(song, state.songKey)) || null; }
 export function visibleSongs(state, set) { return set.songs.filter(song => state.filter === null || song.category === state.filter); }
 export function canLaunch(state) { return !state.locked && state.connected; }
-export function prefsOf({sidebarOpen, locked, filter}) { return {sidebarOpen, locked, filter}; }
+export function prefsOf({sidebarOpen, locked, filter}, mixPrefs) { return {sidebarOpen, locked, filter, ...mixPrefs}; }
 export function banner(state, set, play) {
   const song = set.songs.find(s => s.id === play.playingSongId);
   return song && !same(song, state.songKey) ? {songId:song.id, title:song.title} : null;

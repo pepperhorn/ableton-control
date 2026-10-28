@@ -5,6 +5,12 @@ const {EventEmitter} = require('events');
 const {createApp} = require('./lib/app');
 const {loadConfig, saveConfig} = require('./lib/config');
 const bridge = new EventEmitter();
+let lastMix = {returns:[], tracks:[]};
+bridge.setSend = (trackIndex, returnIndex, value) => {
+  const track = lastMix.tracks.find(t => t.index === trackIndex);
+  const ret = lastMix.returns.find(r => r.index === returnIndex);
+  if (track && ret) max.outlet('send', trackIndex, returnIndex, value, track.name, ret.name);
+};
 bridge.fire = (index, name) => max.outlet('fire', index, name);
 let sceneRead = Promise.resolve();
 max.addHandler('scenes', () => {
@@ -18,6 +24,17 @@ max.addHandler('play', (playing, fired) => {
 });
 max.addHandler('pos', (scene, position, loopStart, loopEnd, beatsPerBar) => {
   sceneRead.then(() => bridge.emit('pos', {scene, position, loopStart, loopEnd, beatsPerBar}));
+});
+let mixRead = Promise.resolve();
+max.addHandler('mix', () => {
+  mixRead = mixRead.then(async () => {
+    const dict = await max.getDict('setlist_touch_mix');
+    lastMix = JSON.parse(dict.mix);
+    bridge.emit('mix', lastMix);
+  }).catch(error => max.post('Mix read failed: ' + error.message));
+});
+max.addHandler('level', (trackIndex, returnIndex, value, ...label) => {
+  mixRead.then(() => bridge.emit('level', {trackIndex, returnIndex, value, label:label.join(' ')}));
 });
 function address(port) {
   const interfaces = Object.values(os.networkInterfaces()).flat();

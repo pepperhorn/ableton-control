@@ -39,7 +39,7 @@
       220,
       22
      ],
-     "text": "route fire address url ready"
+     "text": "route fire address url ready send"
     }
    },
    {
@@ -66,6 +66,58 @@
       22
      ],
      "text": "prepend fire"
+    }
+   },
+   {
+    "box": {
+     "id": "send-defer",
+     "maxclass": "newobj",
+     "patching_rect": [
+      260,
+      280,
+      220,
+      22
+     ],
+     "text": "deferlow"
+    }
+   },
+   {
+    "box": {
+     "id": "send",
+     "maxclass": "newobj",
+     "patching_rect": [
+      260,
+      320,
+      220,
+      22
+     ],
+     "text": "prepend send"
+    }
+   },
+   {
+    "box": {
+     "id": "mix",
+     "maxclass": "newobj",
+     "patching_rect": [
+      500,
+      320,
+      220,
+      22
+     ],
+     "text": "js mix.js"
+    }
+   },
+   {
+    "box": {
+     "id": "mix-dict",
+     "maxclass": "newobj",
+     "patching_rect": [
+      750,
+      320,
+      220,
+      22
+     ],
+     "text": "dict setlist_touch_mix"
     }
    },
    {
@@ -580,6 +632,66 @@
      ],
      "destination": [
       "midiout",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "route",
+      4
+     ],
+     "destination": [
+      "send-defer",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "send-defer",
+      0
+     ],
+     "destination": [
+      "send",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "send",
+      0
+     ],
+     "destination": [
+      "mix",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "refresh",
+      0
+     ],
+     "destination": [
+      "mix",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "mix",
+      0
+     ],
+     "destination": [
+      "node",
       0
      ]
     }
