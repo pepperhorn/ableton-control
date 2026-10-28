@@ -19,6 +19,7 @@ A Max for Live MIDI Effect that runs a small web server inside Live. It shows th
 - **Setlist sidebar:** songs grouped by category, with filter pills. Choosing a song only brings it into view and never launches or interrupts playback.
 - **Progress:** bar lines on each row from the clip length on your timing track, plus a fill and a `bar / total` counter while a scene plays. A solid outline marks the playing scene and a dashed one the queued scene.
 - **Touch safety:** only a clean tap launches. Drags, scrolls, long presses and multi-touch don't. The screen never switches song by itself; a "Now playing" banner offers the way there. Each screen has a lock.
+- **Transport (opt-in):** add `?transport=1` to the address for Play (tap), Stop and Arrangement Rec (1-second hold), plus tempo and bar.beat position.
 - **Anywhere:** a window inside Live, `http://localhost:8765` on the laptop, or `http://<laptop>:8765` from phones on your LAN or tailnet, behind a username and password.
 
 ### Scene naming convention

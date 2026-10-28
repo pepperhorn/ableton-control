@@ -9,7 +9,7 @@ Next ID: 0004
 
 | K | Title | Status | Owner (provider/model) | Branch | PR | Worktree | T3 task/thread | Spec | Plan | Latest handoff | Updated |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 0003 | Transport header (?transport=1; Play tap, Stop/Rec hold) | in-review | codex/gpt-6.1-sol | orch/0003-transport-header | https://github.com/pepperhorn/ableton-control/pull/3 | /home/shaun/.t3/worktrees/m4l-control/t3-79b65641 | impl r1 head c2fe570; Opus r1 changes-requested (non-idempotent play/stop); r2 head bfd084a (104 tests); Opus review r2 (0003-review-r2) | docs/specs/0003-transport-header.md | (in handoff) | docs/handoffs/2026-10-29-0003-transport-header--lead-to-codex.md | 2026-10-29 |
+| 0003 | Transport header | https://github.com/pepperhorn/ableton-control/pull/3 | 2026-10-29 (squash of reviewed bfd084a) | Opus approved r2. Optional: extra lost-pointer safeguard (transport-render.js:66). Verify in Live: get_current_beats_song_time format, play/stop idempotence, Arrangement Record toggle. |
 | 0002 | In-ear mix pages (phase 2) | https://github.com/pepperhorn/ableton-control/pull/2 | 2026-10-29 (22b634a, squash of reviewed cd24b83) | Opus approved r2. Optional nits: late mid-drag echo or cancel() clears release hold early. Needs user verification in Live 12/Windows: routing JSON and Main/Master name, echo latency vs 1 s hold, send labels, touch. |
 | 0001 | Setlist Touch (phase 1) | https://github.com/pepperhorn/ableton-control/pull/1 | 2026-10-29 (e2bc976, squash of reviewed a3f2853) | Opus approved r2. Minor follow-ups folded into 0002: Space blocked in settings inputs; extra LiveAPI reads per position update; empty set shows Reconnecting. Needs user verification in Live on Windows (touch in jweb, END-row empty name, window open/resize). |
 
@@ -20,6 +20,7 @@ Next ID: 0004
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-10-29 0003 in-review→merged — PR #3; 104 tests on main; GBrain: pending write-back
 2026-10-29 0003 changes-requested→in-review — r2 head bfd084a; Opus review r2
 2026-10-29 0003 in-review→changes-requested — Opus r1: play/stop not idempotent (high), stuck pointers, bar.beat from Live, availability tied to setlist
 2026-10-29 0003 dispatched→in-review — PR #3 head c2fe570; Opus review r1
