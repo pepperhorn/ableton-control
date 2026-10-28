@@ -5,7 +5,7 @@
 - **Ledger:** 0003 · **Spec:** [0003](../specs/0003-transport-header.md) · **Plan:** [dispatch handoff](2026-10-29-0003-transport-header--lead-to-codex.md)
 - **Branch:** `orch/0003-transport-header`
 - **Worktree:** `/home/shaun/.t3/worktrees/m4l-control/t3-79b65641`
-- **PR:** pending creation immediately after this handoff is committed and pushed
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/3 (draft)
 - **Base commit:** `303ad27` (`origin/main` at dispatch)
 - **Implementation commit:** `80ecb7c`
 - **Receiver acknowledgement commit:** `db8e55c`
@@ -68,7 +68,7 @@ Lead to acknowledge through the ledger after reviewing this branch and its draft
 ---
 ## Return (implementer → lead)
 - **Outcome:** done
-- **PR:** see header (populated after creation)
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/3 (draft)
 - **What changed:** independent observer-driven transport lane and deterministic patch wiring; validated HTTP/SSE and fake transport; opt-in touch controls, progress fills, disabled-state handling and Live readouts; tests and documentation.
 - **Verification output:**
 
