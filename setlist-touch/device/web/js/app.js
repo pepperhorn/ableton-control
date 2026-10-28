@@ -1,20 +1,50 @@
 import {createTapDetector} from './tap.js';
+import {initialMixState, reduceMix} from './mix-view.js';
+import {createMixRenderer} from './mix-render.js';
 import {initialState, reduce, canLaunch, prefsOf} from './view-state.js';
 import {render, updatePlayback, fitSceneRows} from './render.js';
 const $ = selector => document.querySelector(selector);
 const local = ['localhost','127.0.0.1','[::1]','::1'].includes(location.hostname);
 let prefs = {}; try { prefs = JSON.parse(localStorage.getItem('setlist-touch') || '{}') || {}; } catch (_) {}
 let state = initialState(prefs), set = {songs:[],categories:[],sceneToSong:{}}, play = {playing:-1,fired:-1,playingSongId:null}, pos = null;
-let snapshot = false, initialPlay = false;
+let snapshot = false, initialPlay = false, transport = false, mixSnapshot = false;
+let mix = {returns:[],strips:[]}, mixState = initialMixState(prefs), mixJSON = null;
 let setJSON = null;
 const detector = createTapDetector(), pointers = new Set();
-function cancelGestures() { for (const id of pointers) detector.move(id, Infinity, Infinity); }
+const mixUI = createMixRenderer({
+  stateOf:() => ({...state,connected:transport && mixSnapshot}), mixOf:() => mix, viewOf:() => mixState,
+  onTab:name => dispatchMix({type:'tab',name}), onSnapshot:acceptMix, status
+});
+function savePrefs() { try { localStorage.setItem('setlist-touch',JSON.stringify(prefsOf(state,mixState))); } catch (_) {} }
+function shell() {
+  const settingsOpen = location.hash === '#settings' && local;
+  document.body.dataset.page = mixState.page;
+  $('.setlist-main').hidden = settingsOpen || mixState.page !== 'scenes';
+  $('.mix-panel').hidden = settingsOpen || mixState.page !== 'mix';
+  for (const button of document.querySelectorAll('.page-choice')) button.setAttribute('aria-pressed',String(button.dataset.page === mixState.page));
+  const ready = mixState.page === 'mix' ? mixSnapshot && mix.returns.length > 0 : snapshot;
+  $('.connection-bar').hidden = transport && ready;
+  $('.connection-bar').textContent = transport ? 'Waiting for Live set…' : 'Reconnecting…';
+  mixUI.syncAvailability();
+}
+function dispatchMix(action) {
+  cancelGestures(); mixState = reduceMix(mixState,action,mix); savePrefs(); mixUI.render(); shell();
+}
+function acceptMix(next) {
+  mixSnapshot = true;
+  const serialized = JSON.stringify(next);
+  if (serialized === mixJSON) { shell(); return; }
+  mix = next; mixJSON = serialized; mixState = reduceMix(mixState,{type:'mix'},mix);
+  savePrefs(); mixUI.render(); shell();
+}
+function cancelGestures() { for (const id of pointers) detector.move(id, Infinity, Infinity); mixUI.cancel(); }
 function dispatch(action) {
   cancelGestures(); state = reduce(state, action, set);
-  try { localStorage.setItem('setlist-touch',JSON.stringify(prefsOf(state))); } catch (_) {}
-  render(state, set, play, pos, local);
+  savePrefs();
+  render(state, set, play, pos, local); shell();
 }
-render(state, set, play, pos, local);
+render(state, set, play, pos, local); mixUI.render(); shell();
+for (const button of document.querySelectorAll('.page-choice')) button.addEventListener('click',()=>dispatchMix({type:'page',page:button.dataset.page}));
 $('.sidebar-toggle').addEventListener('click',()=>dispatch({type:'toggleSidebar'}));
 $('.lock-toggle').addEventListener('click',()=>dispatch({type:'toggleLock'}));
 $('.song-nav-prev').addEventListener('click',()=>dispatch({type:'stepSong',dir:-1}));
@@ -51,16 +81,22 @@ window.addEventListener('blur',cancelGestures);
 document.addEventListener('visibilitychange',cancelGestures);
 // Space belongs to Live's transport. Suppress browser defaults throughout this
 // page (including focused navigation buttons); no keyboard gesture launches.
-document.addEventListener('keydown',e=>{if(e.key===' ')e.preventDefault();},{capture:true});
+document.addEventListener('keydown',e=>{if(e.key===' ' && !e.target.closest('input,textarea,select'))e.preventDefault();},{capture:true});
 $('.scene-list').addEventListener('mousedown',e=>e.preventDefault());
 new ResizeObserver(fitSceneRows).observe($('.scene-list'));
 const events = new EventSource('/api/events');
-events.addEventListener('open',()=>{snapshot=false;dispatch({type:'connected',value:false});});
-events.addEventListener('error',()=>{snapshot=false;dispatch({type:'connected',value:false});});
+events.addEventListener('open',()=>{transport=true;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
+events.addEventListener('error',()=>{transport=false;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
+events.addEventListener('mix',e=>acceptMix(JSON.parse(e.data)));
+events.addEventListener('level',e=>{
+  const level=JSON.parse(e.data), strip=mix.strips.find(s=>s.trackIndex===level.trackIndex);
+  if(!strip || !strip.levels[level.returnIndex])return;
+  strip.levels[level.returnIndex]={value:level.value,label:level.label};mixJSON=JSON.stringify(mix);mixUI.updateLevels();
+});
 events.addEventListener('set',e=>{
   const next=JSON.parse(e.data);
   // Keep the last song visible, but never enable launching from an empty set.
-  if(!next.songs.length){snapshot=false;if(state.connected)dispatch({type:'connected',value:false});return;}
+  if(!next.songs.length){snapshot=false;dispatch({type:'connected',value:false});return;}
   snapshot=true;
   const serialized=JSON.stringify(next);
   if(serialized===setJSON)return;
@@ -76,7 +112,7 @@ events.addEventListener('play',e=>{
 events.addEventListener('pos',e=>{pos=JSON.parse(e.data);updatePlayback(state,set,play,pos);});
 async function settings() {
   const show=location.hash==='#settings'&&local;
-  cancelGestures();$('.settings-panel').hidden=!show;$('.setlist-main').hidden=show;$('.setlist-header').hidden=show;
+  cancelGestures();$('.settings-panel').hidden=!show;$('.setlist-header').hidden=show;shell();
   if(!show)return;
   try {const res=await fetch('/api/config');if(!res.ok)throw new Error();const cfg=await res.json();for(const name of ['port','username'])$('.settings-form').elements[name].value=cfg[name];const password=$('.settings-form').elements.password;password.value='';password.placeholder=cfg.hasPassword?'Password set — leave blank to keep':'Set a password';}
   catch(_){$('.settings-status').textContent='Could not load settings.';}

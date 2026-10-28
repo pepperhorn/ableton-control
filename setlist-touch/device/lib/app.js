@@ -2,13 +2,15 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const {parseSet} = require('./parse-set');
 const {progress} = require('./progress');
+const {parseMix} = require('./parse-mix');
 const {authorize, isTrustedLoopback} = require('./auth');
 const {loadConfig, saveConfig: persist, validConfig} = require('./config');
 function createApp({bridge, config = loadConfig(), saveConfig = persist,
   webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
   let cfg = {...config}, parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
-  let setJSON = null;
+  let setJSON = null, mix = parseMix(), mixJSON = null;
+  const sends = new Map(), levelUpdates = new Map();
   const clients = new Set(), servers = new Set(), sockets = new Set();
   const send = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   function broadcast(event, data) { for (const res of clients) { if (res.writableLength > 1024 * 256) res.destroy(); else send(res, event, data); } }
@@ -31,6 +33,58 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     const delay = 50 - (Date.now() - lastPos);
     if (delay <= 0) flushPos(); else if (!posTimer) posTimer = setTimeout(flushPos, delay);
   }
+  function target(value) {
+    const strip = mix.strips.find(s => s.trackIndex === value.trackIndex);
+    const ret = mix.returns.find(r => r.returnIndex === value.returnIndex);
+    return strip && ret && strip.rawName === value.rawName && ret.name === value.returnName && strip.levels[value.returnIndex];
+  }
+  function onMix(raw) {
+    const next = parseMix(raw), serialized = JSON.stringify(next);
+    if (serialized === mixJSON) return;
+    mix = next; mixJSON = serialized;
+    // A delayed command must never outlive the target it was validated against.
+    for (const [key, entry] of sends) if (entry.pending && !target(entry.pending)) {
+      clearTimeout(entry.timer); sends.delete(key);
+    }
+    for (const entry of levelUpdates.values()) clearTimeout(entry.timer);
+    levelUpdates.clear();
+    broadcast('mix', mix);
+  }
+  function onLevel(level) {
+    if (!level || !Number.isInteger(level.trackIndex) || !Number.isInteger(level.returnIndex) ||
+        typeof level.value !== 'number' || !Number.isFinite(level.value) || level.value < 0 || level.value > 1) return;
+    const strip = mix.strips.find(s => s.trackIndex === level.trackIndex);
+    if (!strip || !strip.levels[level.returnIndex]) return;
+    const value = {value:level.value, label:typeof level.label === 'string' ? level.label : ''};
+    strip.levels[level.returnIndex] = value;
+    mixJSON = JSON.stringify(mix);
+    const key = `${level.trackIndex}:${level.returnIndex}`;
+    let entry = levelUpdates.get(key);
+    if (!entry) { entry = {last:0}; levelUpdates.set(key, entry); }
+    entry.pending = {trackIndex:level.trackIndex, returnIndex:level.returnIndex, ...value};
+    const flush = () => {
+      clearTimeout(entry.timer); entry.timer = null;
+      if (!entry.pending) return;
+      entry.last = Date.now(); broadcast('level', entry.pending); entry.pending = null;
+    };
+    const delay = 33 - (Date.now() - entry.last);
+    if (delay <= 0) flush(); else if (!entry.timer) entry.timer = setTimeout(flush, delay);
+  }
+  function setSend(value) {
+    const key = `${value.trackIndex}:${value.returnIndex}`;
+    let entry = sends.get(key);
+    if (!entry) { entry = {last:0}; sends.set(key, entry); }
+    entry.pending = value;
+    const flush = () => {
+      entry.timer = null;
+      const pending = entry.pending; entry.pending = null;
+      if (!pending || !target(pending)) return;
+      entry.last = Date.now(); bridge.setSend(pending.trackIndex, pending.returnIndex, pending.value);
+    };
+    const delay = 33 - (Date.now() - entry.last);
+    if (delay <= 0) flush(); else if (!entry.timer) entry.timer = setTimeout(flush, delay);
+  }
+  bridge.on('mix', onMix); bridge.on('level', onLevel);
   bridge.on('scenes', onScenes); bridge.on('play', onPlay); bridge.on('pos', onPos);
   const ping = setInterval(() => { for (const res of clients) res.write(': ping\n\n'); }, 15000);
   ping.unref();
@@ -56,6 +110,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
       if (route === '/api/events' && req.method === 'GET') {
         res.writeHead(200, {'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});
         clients.add(res); if (setJSON !== null) send(res, 'set', parsed);
+        send(res, 'mix', mix);
         send(res, 'play', play); if (pos) send(res, 'pos', pos);
         res.on('close', () => clients.delete(res)); return;
       }
@@ -65,6 +120,15 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         const row = parsed.songs.flatMap(s => s.rows).find(r => r.sceneIndex === value.sceneIndex);
         if (!row || row.name !== value.name) return reply(res, 409, 'Set changed; tap again');
         bridge.fire(value.sceneIndex, value.name); return reply(res, 204);
+      }
+      if (route === '/api/send' && req.method === 'POST') {
+        let value; try { value = await body(req); } catch (_) { return reply(res, 400, 'Invalid JSON'); }
+        if (!value || !Number.isInteger(value.trackIndex) || !Number.isInteger(value.returnIndex) ||
+            typeof value.rawName !== 'string' || typeof value.returnName !== 'string' ||
+            typeof value.value !== 'number' || !Number.isFinite(value.value) || value.value < 0 || value.value > 1)
+          return reply(res, 400, 'Invalid send');
+        if (!target(value)) return reply(res, 409, JSON.stringify({mix}), 'application/json');
+        setSend(value); return reply(res, 204);
       }
       if (route === '/api/config') {
         if (!isTrustedLoopback(remoteAddress, req.headers.host)) return reply(res, 403, 'Settings are only available on the laptop.');
@@ -119,6 +183,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     getConfig() { return {...cfg}; },
     async close() {
       if (closed) return; closed = true; clearInterval(ping); clearTimeout(posTimer);
+      bridge.removeListener('mix', onMix); bridge.removeListener('level', onLevel);
+      for (const entry of [...sends.values(), ...levelUpdates.values()]) clearTimeout(entry.timer);
       bridge.removeListener('scenes', onScenes); bridge.removeListener('play', onPlay); bridge.removeListener('pos', onPos);
       for (const res of clients) res.end(); for (const socket of sockets) socket.destroy();
       await Promise.all([...servers].map(s => new Promise(resolve => s.close(() => resolve()))));
