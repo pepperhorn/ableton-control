@@ -1,0 +1,20 @@
+import {test} from 'node:test';import a from 'node:assert/strict';import {createRequire} from 'node:module';
+import {initialState,reduce,currentSong,visibleSongs,banner,canLaunch,prefsOf} from '../device/web/js/view-state.js';
+const require=createRequire(import.meta.url),{parseSet}=require('../device/lib/parse-set');const fixture=require('../device/lib/fixture-rise.json');
+const set=parseSet(fixture);const make=names=>parseSet(names.map((name,index)=>({index,name,color:0,loopBeats:null,beatsPerBar:4})));
+const select=(state,id,s=set)=>reduce(state,{type:'selectSong',id},s);
+test('first set selects first or playing song only when songKey null',()=>{let s=reduce(initialState(),{type:'set'},set);a.equal(currentSong(s,set).id,0);s=reduce(initialState(),{type:'set',play:{playingSongId:19}},set);a.equal(currentSong(s,set).id,19);s=reduce(s,{type:'set',play:{playingSongId:9}},set);a.equal(currentSong(s,set).id,19);});
+test('reconcile keeps song after insert above',()=>{const s=select(initialState(),19);const changed=parseSet([{index:0,name:'* NEW'},{index:1,name:'X'},{index:2,name:''},...fixture.map(r=>({...r,index:r.index+3}))]);a.equal(currentSong(reduce(s,{type:'set'},changed),changed).title,'RISE >>');});
+test('empty set then real set with play elsewhere keeps songKey and order',()=>{
+ const old=make(['* RISE','A','* HOW DEEP','B']);
+ const s=select(reduce(initialState(),{type:'set'},old),2,old);
+ const empty=reduce(s,{type:'set',play:{playingSongId:0}},make([]));
+ a.deepEqual(empty.songKey,s.songKey);a.deepEqual(empty.songOrder,s.songOrder);
+ const restored=reduce(empty,{type:'set',play:{playingSongId:0}},old);
+ a.equal(currentSong(restored,old).title,'HOW DEEP');
+});
+test('duplicate titles stay on occurrence 2',()=>{const old=make(['* A','X','* A','Y']),s=select(initialState(),2,old);const next=make(['* B','Z','* A','X','* A','Y']);a.equal(currentSong(reduce(s,{type:'set'},next),next).id,4);});
+test('deleted song selects nearest surviving following then preceding then null',()=>{const old=make(['* A','X','* B','Y','* C','Z','* D','Q']);let s=select(reduce(initialState(),{type:'set'},old),2,old);let next=make(['* A','X','* C','Z','* D','Q']);a.equal(currentSong(reduce(s,{type:'set'},next),next).title,'C');s=select(reduce(initialState(),{type:'set'},old),6,old);next=make(['* A','X','* B','Y']);a.equal(currentSong(reduce(s,{type:'set'},next),next).title,'B');a.equal(currentSong(reduce(s,{type:'set'},make([])),make([])),null);});
+test('play in other song never changes current, banner navigates explicitly',()=>{let s=select(initialState(),9);const play={playingSongId:19};a.deepEqual(banner(s,set,play),{songId:19,title:'RISE >>'});a.equal(currentSong(s,set).id,9);s=reduce(s,{type:'showPlaying',play},set);a.equal(currentSong(s,set).id,19);a.equal(banner(s,set,play),null);a.equal(banner(s,set,{playingSongId:null}),null);});
+test('filters, steps and clamps',()=>{let s=reduce(initialState(),{type:'set'},set);s=reduce(s,{type:'filter',category:'DINNER'},set);a.equal(visibleSongs(s,set).length,3);s=reduce(s,{type:'stepSong',dir:1},set);a.equal(currentSong(s,set).id,9);s=reduce(s,{type:'stepSong',dir:-1},set);a.equal(currentSong(s,set).id,9);for(let i=0;i<5;i++)s=reduce(s,{type:'stepSong',dir:1},set);a.equal(currentSong(s,set).title,'SUN GODDESS >>');});
+test('disconnected and locked launching; persistent prefs only',()=>{let s=initialState();a.equal(canLaunch(s),false);s=reduce(s,{type:'connected',value:true},set);a.equal(canLaunch(s),true);s=reduce(s,{type:'toggleLock'},set);a.equal(canLaunch(s),false);a.deepEqual(Object.keys(prefsOf(s)).sort(),['filter','locked','sidebarOpen']);});

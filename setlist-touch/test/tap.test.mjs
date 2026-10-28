@@ -1,0 +1,4 @@
+import {test} from 'node:test';import a from 'node:assert/strict';import {createTapDetector} from '../device/web/js/tap.js';
+test('clean tap, drag, long hold, different row',()=>{const d=createTapDetector();d.down(1,0,0,0,'A');a.equal(d.up(1,4,3,200,'A'),'A');d.down(1,0,0,0,'A');d.move(1,0,12);d.move(1,0,0);a.equal(d.up(1,0,0,100,'A'),null);d.down(1,0,0,0,'A');a.equal(d.up(1,0,0,600,'A'),null);d.down(1,0,0,0,'A');a.equal(d.up(1,0,0,100,'B'),null);});
+test('multitouch never launches and recovers',()=>{const d=createTapDetector();d.down(1,0,0,0,'A');d.down(2,50,0,10,'B');a.equal(d.up(1,0,0,100,'A'),null);a.equal(d.up(2,50,0,110,'B'),null);d.down(3,0,0,0,'A');a.equal(d.up(3,0,0,100,'A'),'A');});
+test('strict thresholds, cancellation, release distance',()=>{const d=createTapDetector();d.down(1,0,0,0,'A');a.equal(d.up(1,10,0,100,'A'),null);d.down(1,0,0,0,'A');a.equal(d.up(1,0,0,500,'A'),null);d.down(1,0,0,0,'A');d.cancel(1);a.equal(d.up(1,0,0,100,'A'),null);});

@@ -1,0 +1,233 @@
+[
+  {
+    "index": 0,
+    "name": "* GIVING YOU THE BEST THAT I'VE GOT",
+    "color": 16777215,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 1,
+    "name": "READY",
+    "color": 15230106,
+    "loopBeats": 4,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 2,
+    "name": "COUNT IN",
+    "color": 15230106,
+    "loopBeats": 4,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 3,
+    "name": "Form [N];",
+    "color": 2282570,
+    "loopBeats": 64,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 4,
+    "name": "End Vamp [V];",
+    "color": 15852650,
+    "loopBeats": 16,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 5,
+    "name": "LAST CHORD [S2]",
+    "color": 16730926,
+    "loopBeats": 8,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 6,
+    "name": "",
+    "color": 10132122,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 7,
+    "name": "* [[ DINNER ]]",
+    "color": 10132122,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 8,
+    "name": "",
+    "color": 10132122,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 9,
+    "name": "* HOW DEEP >>",
+    "color": 16777215,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 10,
+    "name": "READY",
+    "color": 15230106,
+    "loopBeats": 4,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 11,
+    "name": "COUNT IN",
+    "color": 15230106,
+    "loopBeats": 4,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 12,
+    "name": "INTRO [V4]",
+    "color": 15852650,
+    "loopBeats": 16,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 13,
+    "name": "Verse [N] (14)",
+    "color": 2021024,
+    "loopBeats": 56,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 14,
+    "name": "Chorus [V];",
+    "color": 15852650,
+    "loopBeats": 16,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 15,
+    "name": "Chorus Breakdown[V]",
+    "color": 15852650,
+    "loopBeats": 16,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 16,
+    "name": "Outro [V]",
+    "color": 15852650,
+    "loopBeats": 16,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 17,
+    "name": "Last Chord [S]",
+    "color": 16730926,
+    "loopBeats": 4,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 18,
+    "name": "",
+    "color": 10132122,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 19,
+    "name": "* RISE >>",
+    "color": 16777215,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 20,
+    "name": "READY",
+    "color": 15230106,
+    "loopBeats": 4,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 21,
+    "name": "COUNT IN",
+    "color": 15230106,
+    "loopBeats": 4,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 22,
+    "name": "[V4] Intro",
+    "color": 15852650,
+    "loopBeats": 16,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 23,
+    "name": "[N32] AA",
+    "color": 2282570,
+    "loopBeats": 128,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 24,
+    "name": "[N16] B",
+    "color": 2282570,
+    "loopBeats": 64,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 25,
+    "name": "[N16] A3",
+    "color": 2282570,
+    "loopBeats": 64,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 26,
+    "name": "[V4] Solos On Intro",
+    "color": 15852650,
+    "loopBeats": 16,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 27,
+    "name": "[V8] Interlude",
+    "color": 15852650,
+    "loopBeats": 32,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 28,
+    "name": "{EMPTY}",
+    "color": 10132122,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 29,
+    "name": "[S] Last Chord",
+    "color": 16730926,
+    "loopBeats": 4,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 30,
+    "name": "",
+    "color": 10132122,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 31,
+    "name": "",
+    "color": 10132122,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  },
+  {
+    "index": 32,
+    "name": "* SUN GODDESS >>",
+    "color": 16777215,
+    "loopBeats": null,
+    "beatsPerBar": 4
+  }
+]
