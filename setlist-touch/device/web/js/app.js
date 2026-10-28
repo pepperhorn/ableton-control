@@ -18,7 +18,7 @@ const mixUI = createMixRenderer({
 });
 const transportUI = createTransportRenderer({
   enabled:new URLSearchParams(location.search).get('transport') === '1',
-  stateOf:() => state, status
+  stateOf:() => ({...state, connected:transport}), status
 });
 function savePrefs() { try { localStorage.setItem('setlist-touch',JSON.stringify(prefsOf(state,mixState))); } catch (_) {} }
 function shell() {

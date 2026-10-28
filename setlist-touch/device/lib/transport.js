@@ -5,6 +5,10 @@ function formatPosition(time, numerator = 4, denominator = 4) {
   const beat = Math.floor(Math.max(0, time) * denominator / 4);
   return `${Math.floor(beat / numerator) + 1}.${beat % numerator + 1}`;
 }
+function formatBeatsPosition(value) {
+  const match = typeof value === 'string' && /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(value.trim());
+  return match && Number(match[1]) > 0 && Number(match[2]) > 0 ? `${Number(match[1])}.${Number(match[2])}` : null;
+}
 function validCommand(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       Object.keys(value).some(key => key !== 'command' && key !== 'value')) return false;
@@ -15,10 +19,11 @@ function parseTransport(raw) {
   if (!raw || ![0, 1].includes(raw.is_playing) || ![0, 1].includes(raw.record_mode) ||
       !Number.isFinite(raw.tempo) || raw.tempo <= 0 ||
       !Number.isInteger(raw.signature_numerator) || !Number.isInteger(raw.signature_denominator)) return null;
-  const position = formatPosition(raw.current_song_time, raw.signature_numerator, raw.signature_denominator);
-  if (position === null) return null;
+  const fallback = formatPosition(raw.current_song_time, raw.signature_numerator, raw.signature_denominator);
+  if (fallback === null) return null;
+  const position = formatBeatsPosition(raw.beats_song_time) || fallback;
   return {is_playing:raw.is_playing, record_mode:raw.record_mode, tempo:raw.tempo,
     current_song_time:raw.current_song_time, signature_numerator:raw.signature_numerator,
     signature_denominator:raw.signature_denominator, position};
 }
-module.exports = {formatPosition, validCommand, parseTransport};
+module.exports = {formatPosition, formatBeatsPosition, validCommand, parseTransport};

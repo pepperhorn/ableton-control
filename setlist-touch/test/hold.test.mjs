@@ -21,3 +21,8 @@ test('leaving the button permanently cancels this hold, even after reentry', () 
   a.equal(h.progress(400), 0.4); h.move(1, false); h.move(1, true);
   a.equal(h.up(1, 1200), false);
 });
+test('reset clears an abandoned hold and all pointers so fresh holds complete', () => {
+  const h = createHoldGesture(); h.down(1, 0); h.down(2, 100); h.reset();
+  a.equal(h.progress(2000), 0); a.equal(h.up(1, 2000), false);
+  h.down(3, 3000); a.equal(h.up(3, 4000), true);
+});

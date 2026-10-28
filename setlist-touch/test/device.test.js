@@ -59,6 +59,6 @@ test('Node for Max passes transport selector/target and forwards observed state'
  const ctx=vm.createContext({require:req,process:{on:()=>{}}});vm.runInContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'),ctx);
  bridge.transport('play');bridge.transport('stop');bridge.transport('record',1);bridge.transport('record',0);
  a.deepEqual(outlets.filter(o=>o[0]==='transport'),[['transport','play'],['transport','stop'],['transport','record',1],['transport','record',0]]);
- let state;bridge.on('transport',v=>state=v);handlers.transport(1,0,120,3,6,8);a.equal(state.current_song_time,3);a.equal(state.signature_denominator,8);
+ let state;bridge.on('transport',v=>state=v);handlers.transport(1,0,120,3,6,8,'37.2.1.0');a.equal(state.beats_song_time,'37.2.1.0');a.equal(state.current_song_time,3);a.equal(state.signature_denominator,8);
  await Promise.resolve();
 });

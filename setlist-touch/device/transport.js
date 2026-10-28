@@ -24,8 +24,14 @@ function flush() {
             value = root.get(properties[i]);
             values.push(Number(Array.isArray(value) ? value[0] : value));
         }
+        // Live accounts for earlier signature changes; keep the numeric fallback.
+        var beats = '';
+        try {
+            beats = root.call('get_current_beats_song_time');
+            beats = Array.isArray(beats) ? beats.join(' ') : String(beats);
+        } catch (e) {}
         last = Date.now();
-        outlet(0, 'transport', values[0], values[1], values[2], values[3], values[4], values[5]);
+        outlet(0, 'transport', values[0], values[1], values[2], values[3], values[4], values[5], beats);
     } catch (e) { retry.schedule(1000); }
 }
 function refresh() {
@@ -40,12 +46,19 @@ function refresh() {
         building = false; changed();
     } catch (e) { building = false; retry.schedule(1000); }
 }
-function play() {
-    if (active && !building && root && root.id) root.call('start_playing');
+function setPlaying(target) {
+    if (!active || building || !root || !root.id) return;
+    var command = target ? 'play' : 'stop';
+    try {
+        // Read Live at the deferred write boundary, never a cached observer value.
+        var value = root.get('is_playing');
+        value = Number(Array.isArray(value) ? value[0] : value);
+        if (value === 1 - target) root.call(target ? 'start_playing' : 'stop_playing');
+        else post('Setlist Touch ' + command + ' ignored: is_playing=' + value + '\n');
+    } catch (e) { post('Setlist Touch ' + command + ' ignored: ' + e + '\n'); }
 }
-function stop() {
-    if (active && !building && root && root.id) root.call('stop_playing');
-}
+function play() { setPlaying(1); }
+function stop() { setPlaying(0); }
 function record(value) {
     if (active && !building && root && root.id && (value === 0 || value === 1)) root.set('record_mode', value);
 }

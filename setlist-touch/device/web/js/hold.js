@@ -15,6 +15,7 @@ export function createHoldGesture({ms = 1000} = {}) {
       return fire;
     },
     cancel(id) { if (active && active.id === id) active = null; pointers.delete(id); },
+    reset() { pointers.clear(); active = null; },
     progress(t) { return active ? Math.max(0, Math.min(1, (t - active.t) / ms)) : 0; }
   };
 }
