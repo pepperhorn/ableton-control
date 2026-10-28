@@ -6,8 +6,8 @@ Max for Live tools for running a live band set from **Ableton Live 12 Session vi
 
 | Device | What it does | Status |
 | --- | --- | --- |
-| [Setlist Touch](#setlist-touch) | Large touch screen for the current song's scenes, with a setlist sidebar and bar-accurate progress. Works in Live and in any browser, including a phone over Tailscale. | In review, [PR #1](https://github.com/pepperhorn/ableton-control/pull/1) |
-| [In-ear mix pages](#in-ear-mix-pages-planned) | Setlist Touch pages where any player adjusts any player's in-ear mix from their phone | Designed and planned |
+| [Setlist Touch](#setlist-touch) | Large touch screen for the current song's scenes, with a setlist sidebar and bar-accurate progress. Works in Live and in any browser, including a phone over Tailscale. | Built and reviewed; needs a check in Live on Windows |
+| [In-ear mix pages](#in-ear-mix-pages-planned) | Setlist Touch pages where any player adjusts any player's in-ear mix from their phone | In progress |
 | [SceneNav](#scenenav) | Prev / Launch / Next scene buttons you can map to computer keys or a MIDI controller | Usable, not yet tested in Live |
 
 Requires Ableton Live 12 Suite (Max for Live included). Setlist Touch targets a Windows touch laptop.
@@ -36,9 +36,9 @@ Tags like `[V]`, `[N32]` and `[S]` are only labels. Your clip follow actions do 
 
 **Timing track:** the last regular track, just left of Main. In each section's row it holds a clip (MIDI or warped audio) whose loop length sets the section's bar count. It should carry the same follow actions as the music.
 
-Install, settings, networking and the touch check are covered in [`setlist-touch/README.md`](setlist-touch/README.md). That file reaches `main` when PR #1 merges.
+Install, settings, networking and the touch check are covered in [`setlist-touch/README.md`](setlist-touch/README.md).
 
-## In-ear mix pages (planned)
+## In-ear mix pages (in progress)
 
 A "My mix" page in Setlist Touch, with one tab per player:
 - **Tabs:** every return track that isn't routed to Main (e.g. `Shaun`, `Keith`) gets a tab. Reverb and delay returns that feed Main are left out.

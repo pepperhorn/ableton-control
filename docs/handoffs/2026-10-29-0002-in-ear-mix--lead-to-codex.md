@@ -5,7 +5,7 @@
 - **Ledger:** 0002 · **Spec:** docs/superpowers/specs/2026-10-29-in-ear-mix-design.md · **Plan:** docs/plans/0002-in-ear-mix.md (T1 → T2 → T3, in order, one worktree)
 - **Branch:** orch/0002-in-ear-mix · **Worktree:** created by T3
 - **PR:** (opened by implementer)
-- **Base commit:** (filled in at dispatch, main after 0001 merges)
+- **Base commit:** e2bc97671fbd874a24674a20a6e325211d695309
 - **Port (if running a server):** 5220 (`SETLIST_TOUCH_PORT=5220 node device/dev.js`)
 - **Status:** open
 
@@ -55,6 +55,11 @@ SETLIST_TOUCH_PORT=5220 node device/dev.js   # then check the UI with a headless
 - Moves are relative, horizontal only and single-pointer. A tap never changes a level.
 - The phase 1 timing track is unaffected: the user confirmed there's an empty track immediately before Main.
 - GBrain: no project pages yet for m4l-control.
+
+## Also fix (0001 review follow-ups, files you already own)
+- `setlist-touch/device/web/js/app.js` (~line 54): the Space-blocking keydown listener also blocks typing spaces in settings inputs. Skip `input`, `textarea` and `select` targets. Add a regression test if the logic is testable.
+- The empty-set state shows "Reconnecting…". Show a neutral "Waiting for Live set…" instead when connected but the set is empty.
+- Out of scope for you: extra LiveAPI reads per position update live in `lom.js`, which you don't own. Note it in your return handoff.
 
 ## Open questions
 None.
