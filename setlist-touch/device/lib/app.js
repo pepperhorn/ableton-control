@@ -2,17 +2,20 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const {parseSet} = require('./parse-set');
 const {progress} = require('./progress');
-const {authorize, isLoopback} = require('./auth');
+const {authorize, isTrustedLoopback} = require('./auth');
 const {loadConfig, saveConfig: persist, validConfig} = require('./config');
 function createApp({bridge, config = loadConfig(), saveConfig = persist,
   webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
   let cfg = {...config}, parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
+  let setJSON = null;
   const clients = new Set(), servers = new Set(), sockets = new Set();
   const send = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   function broadcast(event, data) { for (const res of clients) { if (res.writableLength > 1024 * 256) res.destroy(); else send(res, event, data); } }
   function onScenes(raw) {
-    parsed = parseSet(raw);
+    const next = parseSet(raw), serialized = JSON.stringify(next);
+    if (serialized === setJSON) return;
+    parsed = next; setJSON = serialized;
     play = {...play, playingSongId:parsed.sceneToSong[play.playing] === undefined ? null : parsed.sceneToSong[play.playing]};
     broadcast('set', parsed); broadcast('play', play);
   }
@@ -35,6 +38,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     res.writeHead(status, {'Content-Type':type, 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'}); res.end(body);
   }
   function json(res, data) { reply(res, 200, JSON.stringify(data), 'application/json'); }
+  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password}; }
   async function body(req) {
     if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) throw new Error('Expected JSON');
     let text = '';
@@ -44,14 +48,15 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   async function handler(req, res) {
     try {
       const remoteAddress = remoteAddressOf(req);
-      const access = authorize({remoteAddress, authorization:req.headers.authorization}, cfg);
+      const access = authorize({remoteAddress, host:req.headers.host, authorization:req.headers.authorization}, cfg);
       if (access === 'challenge') { res.setHeader('WWW-Authenticate', 'Basic realm="Setlist Touch"'); return reply(res, 401, 'Authentication required'); }
       if (access === 'forbidden') return reply(res, 403, 'Set a password in Setlist Touch settings on the laptop.');
       if (req.method === 'POST' && req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) return reply(res, 403, 'Invalid origin');
       const route = req.url.split('?')[0];
       if (route === '/api/events' && req.method === 'GET') {
         res.writeHead(200, {'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});
-        clients.add(res); send(res, 'set', parsed); send(res, 'play', play); if (pos) send(res, 'pos', pos);
+        clients.add(res); if (setJSON !== null) send(res, 'set', parsed);
+        send(res, 'play', play); if (pos) send(res, 'pos', pos);
         res.on('close', () => clients.delete(res)); return;
       }
       if (route === '/api/fire' && req.method === 'POST') {
@@ -59,14 +64,15 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         if (!value || !Number.isInteger(value.sceneIndex) || typeof value.name !== 'string') return reply(res, 400, 'Invalid scene');
         const row = parsed.songs.flatMap(s => s.rows).find(r => r.sceneIndex === value.sceneIndex);
         if (!row || row.name !== value.name) return reply(res, 409, 'Set changed; tap again');
-        bridge.fire(value.sceneIndex); return reply(res, 204);
+        bridge.fire(value.sceneIndex, value.name); return reply(res, 204);
       }
       if (route === '/api/config') {
-        if (!isLoopback(remoteAddress)) return reply(res, 403, 'Settings are only available on the laptop.');
-        if (req.method === 'GET') return json(res, cfg);
+        if (!isTrustedLoopback(remoteAddress, req.headers.host)) return reply(res, 403, 'Settings are only available on the laptop.');
+        if (req.method === 'GET') return json(res, publicConfig());
         if (req.method === 'POST') {
           let value; try { value = await body(req); } catch (_) { return reply(res, 400, 'Invalid JSON'); }
           if (!validConfig(value)) return reply(res, 400, 'Invalid port or credentials');
+          if (value.password === '') value.password = cfg.password;
           if (changing) return reply(res, 409, 'Settings are being changed');
           changing = true;
           let candidate;
@@ -76,7 +82,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
             cfg = {port:value.port, username:value.username, password:value.password};
             const previous = active;
             if (candidate) { active = candidate; if (typeof bridge.addressChanged === 'function') bridge.addressChanged(cfg.port); }
-            json(res, cfg);
+            json(res, publicConfig());
             if (candidate && previous) {
               for (const client of clients) client.end();
               previous.close();

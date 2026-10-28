@@ -7,6 +7,7 @@ const fs = require('fs');
 const {createApp} = require('../device/lib/app');
 const {createFakeBridge} = require('../device/lib/fake-bridge');
 const fixture = require('../device/lib/fixture-rise.json');
+const {parseSet} = require('../device/lib/parse-set');
 const artifactDir = process.env.ARTIFACT_DIR || '/tmp/setlist-touch-browser';
 async function run() {
   fs.mkdirSync(artifactDir, {recursive:true});
@@ -19,6 +20,12 @@ async function run() {
   bridge.on('fire', () => launches++);
   try {
     const page = await browser.newPage({viewport:{width:1280,height:800}});
+    // Allow direct duplicate/empty event delivery even though the server now
+    // suppresses duplicates. This exercises the client's independent guard.
+    await page.addInitScript(() => {
+      const NativeEventSource=window.EventSource;
+      window.EventSource=function(...args){const events=new NativeEventSource(...args);window.testEvents=events;return events;};
+    });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(base);
@@ -54,9 +61,26 @@ async function run() {
     await page.locator('.lock-toggle').click();
     const firing = page.waitForResponse(r => r.url().endsWith('/api/fire'));
     await row.click(); assert.equal((await firing).status(),204); assert.equal(launches,1);
+    assert.equal(await page.evaluate(()=>!!document.activeElement.closest('.scene-row')),false);
+    const fireRequests=[];page.on('request',request=>{if(request.url().endsWith('/api/fire'))fireRequests.push(request);});
+    await page.keyboard.press('Space');
+    await row.focus();await page.keyboard.press('Space');await page.keyboard.press('Enter');
+    assert.equal(fireRequests.length,0);assert.equal(launches,1);
+    await page.locator('.sidebar-toggle').focus();
+    await page.keyboard.press('Space');
+    assert.equal(await page.locator('.setlist-sidebar').isVisible(),false);
+    // An identical set during a pointer gesture must keep both DOM and tap.
+    const tapping=page.waitForResponse(r=>r.url().endsWith('/api/fire'));
+    await page.mouse.move(rect.x+30,rect.y+20);await page.mouse.down();
+    assert.equal(await page.evaluate(set=>{
+      const before=document.querySelector('.scene-row');
+      window.testEvents.dispatchEvent(new MessageEvent('set',{data:JSON.stringify(set)}));
+      return before===document.querySelector('.scene-row');
+    },parseSet(fixture)),true);
+    await page.mouse.up();assert.equal((await tapping).status(),204);assert.equal(launches,2);
     // Reject a stale rendered row without launching anything.
     await page.route('**/api/fire', route => route.fulfill({status:409,body:'Set changed'}));
-    await row.click(); await page.locator('.scene-row.is-stale').waitFor(); assert.equal(launches,1);
+    await row.click(); await page.locator('.scene-row.is-stale').waitFor(); assert.equal(launches,2);
     await page.unroute('**/api/fire');
     // A full replacement snapshot must preserve browsing by title/occurrence.
     bridge.emit('scenes',[{index:0,name:'* New',color:0,loopBeats:null,beatsPerBar:4}, ...fixture.map(s => ({...s,index:s.index+1}))]);
@@ -77,16 +101,27 @@ async function run() {
     await page.locator('.touch-target.is-hit').waitFor();
     await page.locator('.spike-back').click();
     await page.waitForFunction(() => document.querySelector('.song-title').textContent === 'RISE >>');
+    if(!await page.locator('.setlist-sidebar').isVisible())await page.locator('.sidebar-toggle').click();
+    await page.locator('.setlist-item').filter({hasText:'HOW DEEP'}).click();
+    await page.locator('.sidebar-toggle').click();
     // Keep the page loaded while the server stops, then reconnect to the same port.
     await app.close();
     await page.locator('.connection-bar').waitFor();
     const reconnectBefore = launches;
     await page.locator('.scene-row').first().click(); assert.equal(launches,reconnectBefore);
-    app = createApp({bridge}); await app.listen(port); bridge.snapshot();
+    app = createApp({bridge}); await app.listen(port);
+    // Establish the new SSE connection before Live has delivered its first set.
+    await page.waitForFunction(()=>window.testEvents.readyState===1);
+    assert.equal(await page.locator('.connection-bar').isVisible(),true);
+    assert.equal(await page.locator('.song-title').textContent(),'HOW DEEP >>');
+    await page.evaluate(()=>window.testEvents.dispatchEvent(new MessageEvent('set',{data:JSON.stringify({songs:[],categories:[],sceneToSong:{}})})));
+    assert.equal(await page.locator('.song-title').textContent(),'HOW DEEP >>');
+    stop();bridge.simulate({scene:23,bpm:100});
     await page.waitForFunction(() => document.querySelector('.connection-bar').hidden, {timeout:15000});
-    assert.equal(await page.locator('.song-title').textContent(),'RISE >>');
+    assert.equal(await page.locator('.song-title').textContent(),'HOW DEEP >>');
+    assert.equal(await page.locator('.now-playing-banner').textContent(),'Now playing: RISE >>');
     assert.deepEqual(errors,[]);
-    console.log(JSON.stringify({result:'PASS',desktop:geometry,riseRows:11,dragLaunches:0,multitouchLaunches:0,lockedLaunches:0,cleanTapLaunches:1,stale409:true,settings:true,touchDiagnostic:true,reconnect:true,phoneOverflow:false,pageErrors:errors,artifactDir},null,2));
+    console.log(JSON.stringify({result:'PASS',desktop:geometry,riseRows:11,dragLaunches:0,multitouchLaunches:0,lockedLaunches:0,keyboardLaunches:0,cleanTapLaunches:2,identicalSetKeepsGesture:true,stale409:true,settings:true,touchDiagnostic:true,reconnectKeepsBrowsedSong:true,emptySetKeepsBrowsedSong:true,phoneOverflow:false,pageErrors:errors,artifactDir},null,2));
   } finally { stop(); await app.close(); await browser.close(); }
 }
 run().catch(error => {console.error(error);process.exitCode=1;});

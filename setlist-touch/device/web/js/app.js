@@ -6,6 +6,7 @@ const local = ['localhost','127.0.0.1','[::1]','::1'].includes(location.hostname
 let prefs = {}; try { prefs = JSON.parse(localStorage.getItem('setlist-touch') || '{}') || {}; } catch (_) {}
 let state = initialState(prefs), set = {songs:[],categories:[],sceneToSong:{}}, play = {playing:-1,fired:-1,playingSongId:null}, pos = null;
 let snapshot = false, initialPlay = false;
+let setJSON = null;
 const detector = createTapDetector(), pointers = new Set();
 function cancelGestures() { for (const id of pointers) detector.move(id, Infinity, Infinity); }
 function dispatch(action) {
@@ -42,19 +43,28 @@ document.addEventListener('pointerup',e=>{
   // Touch browsers implicitly capture pointers; hit-test the real release position.
   const hit=document.elementFromPoint(e.clientX,e.clientY);
   const row=detector.up(e.pointerId,e.clientX,e.clientY,e.timeStamp,hit && hit.closest('.scene-row'));
-  pointers.delete(e.pointerId); if(row)launch(row);
+  pointers.delete(e.pointerId); if(row){row.blur();launch(row);}
 });
 document.addEventListener('pointercancel',e=>{detector.cancel(e.pointerId);pointers.delete(e.pointerId);});
 $('.scene-list').addEventListener('scroll',cancelGestures,{passive:true});
 window.addEventListener('blur',cancelGestures);
 document.addEventListener('visibilitychange',cancelGestures);
-$('.scene-list').addEventListener('keydown',e=>{const row=e.target.closest('.scene-row');if(row&&!e.repeat&&(e.key==='Enter'||e.key===' ')){e.preventDefault();launch(row);}});
+// Space belongs to Live's transport. Suppress browser defaults throughout this
+// page (including focused navigation buttons); no keyboard gesture launches.
+document.addEventListener('keydown',e=>{if(e.key===' ')e.preventDefault();},{capture:true});
+$('.scene-list').addEventListener('mousedown',e=>e.preventDefault());
 new ResizeObserver(fitSceneRows).observe($('.scene-list'));
 const events = new EventSource('/api/events');
 events.addEventListener('open',()=>{snapshot=false;dispatch({type:'connected',value:false});});
 events.addEventListener('error',()=>{snapshot=false;dispatch({type:'connected',value:false});});
 events.addEventListener('set',e=>{
-  set=JSON.parse(e.data); snapshot=true;
+  const next=JSON.parse(e.data);
+  // Keep the last song visible, but never enable launching from an empty set.
+  if(!next.songs.length){snapshot=false;if(state.connected)dispatch({type:'connected',value:false});return;}
+  snapshot=true;
+  const serialized=JSON.stringify(next);
+  if(serialized===setJSON)return;
+  set=next;setJSON=serialized;
   if(initialPlay)dispatch({type:'set',play});
 });
 events.addEventListener('play',e=>{
@@ -68,7 +78,7 @@ async function settings() {
   const show=location.hash==='#settings'&&local;
   cancelGestures();$('.settings-panel').hidden=!show;$('.setlist-main').hidden=show;$('.setlist-header').hidden=show;
   if(!show)return;
-  try {const res=await fetch('/api/config');if(!res.ok)throw new Error();const cfg=await res.json();for(const name of ['port','username','password'])$('.settings-form').elements[name].value=cfg[name];}
+  try {const res=await fetch('/api/config');if(!res.ok)throw new Error();const cfg=await res.json();for(const name of ['port','username'])$('.settings-form').elements[name].value=cfg[name];const password=$('.settings-form').elements.password;password.value='';password.placeholder=cfg.hasPassword?'Password set — leave blank to keep':'Set a password';}
   catch(_){$('.settings-status').textContent='Could not load settings.';}
 }
 window.addEventListener('hashchange',settings);settings();

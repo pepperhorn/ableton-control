@@ -188,20 +188,7 @@
       220,
       22
      ],
-     "text": "open"
-    }
-   },
-   {
-    "box": {
-     "id": "pcontrol",
-     "maxclass": "newobj",
-     "patching_rect": [
-      750,
-      160,
-      220,
-      22
-     ],
-     "text": "pcontrol"
+     "text": "showwindow"
     }
    },
    {
@@ -348,6 +335,18 @@
         "patchline": {
          "source": [
           "loaded",
+          0
+         ],
+         "destination": [
+          "window-js",
+          0
+         ]
+        }
+       },
+       {
+        "patchline": {
+         "source": [
+          "control-in",
           0
          ],
          "destination": [
@@ -565,18 +564,6 @@
     "patchline": {
      "source": [
       "open-message",
-      0
-     ],
-     "destination": [
-      "pcontrol",
-      0
-     ]
-    }
-   },
-   {
-    "patchline": {
-     "source": [
-      "pcontrol",
       0
      ],
      "destination": [

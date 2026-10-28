@@ -5,7 +5,7 @@ const {EventEmitter} = require('events');
 const {createApp} = require('./lib/app');
 const {loadConfig, saveConfig} = require('./lib/config');
 const bridge = new EventEmitter();
-bridge.fire = index => max.outlet('fire', index);
+bridge.fire = (index, name) => max.outlet('fire', index, name);
 let sceneRead = Promise.resolve();
 max.addHandler('scenes', () => {
   sceneRead = sceneRead.then(async () => {

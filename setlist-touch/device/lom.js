@@ -6,7 +6,7 @@ var root = null, scenesDict = null, debounce = null, poll = null;
 var rootObservers = [], sceneObservers = [], trackObservers = [];
 var positionObserver = null, sceneStructure = '', trackStructure = '';
 var timingPath = null, rows = [], playing = -1, fired = -1;
-var positionKey = '', building = false, active = false;
+var positionKey = '', rowsJSON = null, building = false, active = false;
 
 function scalar(api, property) {
     var value = api.get(property);
@@ -42,7 +42,7 @@ function refresh() {
     root = new LiveAPI('live_set');
     scenesDict = new Dict('setlist_touch_scenes');
     debounce = new Task(rebuild, this);
-    poll = new Task(rebuild, this);
+    poll = new Task(pollTiming, this);
     poll.interval = 5000;
     building = true;
     watch('live_set', 'scenes', schedule, rootObservers);
@@ -61,7 +61,11 @@ function clipAt(index) {
     release(slot);
     return hasClip ? new LiveAPI(path + ' clip') : null;
 }
-function rebuild() {
+function beatTiming(clip) {
+    return Number(scalar(clip, 'is_audio_clip')) === 0 || Number(scalar(clip, 'warping')) === 1;
+}
+function pollTiming() { rebuild(true); }
+function rebuild(timingOnly) {
     if (!active || building) return;
     building = true;
     try {
@@ -73,25 +77,36 @@ function rebuild() {
         timingPath = trackCount ? 'live_set tracks ' + (trackCount - 1) : null;
         var songNumerator = Number(scalar(root, 'signature_numerator'));
         var songDenominator = Number(scalar(root, 'signature_denominator'));
-        var next = [], i, scene, clip, enabled, numerator, denominator, loopStart, loopEnd;
+        var next = [], i, scene, clip, enabled, numerator, denominator, loopStart, loopEnd, metadata, beats;
         // clipAt uses the current scene count while the list is being rebuilt.
         rows.length = sceneCount;
         for (i = 0; i < sceneCount; i++) {
-            scene = new LiveAPI('live_set scenes ' + i);
-            enabled = Number(scalar(scene, 'time_signature_enabled')) === 1;
-            numerator = enabled ? Number(scalar(scene, 'time_signature_numerator')) : songNumerator;
-            denominator = enabled ? Number(scalar(scene, 'time_signature_denominator')) : songDenominator;
+            scene = null;
+            if (timingOnly && !changedScenes && !changedTracks && rows[i]) metadata = rows[i];
+            else {
+                scene = new LiveAPI('live_set scenes ' + i);
+                enabled = Number(scalar(scene, 'time_signature_enabled')) === 1;
+                numerator = enabled ? Number(scalar(scene, 'time_signature_numerator')) : songNumerator;
+                denominator = enabled ? Number(scalar(scene, 'time_signature_denominator')) : songDenominator;
+                metadata = {name:text(scene, 'name'), color:Number(scalar(scene, 'color')),
+                    beatsPerBar:numerator > 0 && denominator > 0 ? numerator * 4 / denominator : 4};
+            }
             clip = clipAt(i);
-            loopStart = clip ? Number(scalar(clip, 'loop_start')) : 0;
-            loopEnd = clip ? Number(scalar(clip, 'loop_end')) : 0;
-            next.push({index:i, name:text(scene, 'name'), color:Number(scalar(scene, 'color')),
+            beats = clip && beatTiming(clip);
+            loopStart = beats ? Number(scalar(clip, 'loop_start')) : 0;
+            loopEnd = beats ? Number(scalar(clip, 'loop_end')) : 0;
+            next.push({index:i, name:metadata.name, color:metadata.color,
                 loopBeats:clip && loopEnd > loopStart ? loopEnd - loopStart : null,
-                beatsPerBar:numerator > 0 && denominator > 0 ? numerator * 4 / denominator : 4});
+                beatsPerBar:metadata.beatsPerBar});
             release(scene); release(clip);
         }
         rows = next;
-        scenesDict.set('scenes', JSON.stringify(rows));
-        outlet(0, 'scenes');
+        var serialized = JSON.stringify(rows);
+        if (serialized !== rowsJSON) {
+            scenesDict.set('scenes', serialized);
+            rowsJSON = serialized;
+            outlet(0, 'scenes');
+        }
         if (changedScenes) {
             releaseAll(sceneObservers);
             for (i = 0; i < sceneCount; i++) {
@@ -149,18 +164,28 @@ function playbackChanged() {
 function positionChanged() {
     if (!active || building || playing < 0 || !positionObserver || !rows[playing]) return;
     try {
-        outlet(0, 'pos', playing, Number(scalar(positionObserver, 'playing_position')),
-            Number(scalar(positionObserver, 'loop_start')), Number(scalar(positionObserver, 'loop_end')),
+        var beats = beatTiming(positionObserver);
+        outlet(0, 'pos', playing, beats ? Number(scalar(positionObserver, 'playing_position')) : 0,
+            beats ? Number(scalar(positionObserver, 'loop_start')) : 0,
+            beats ? Number(scalar(positionObserver, 'loop_end')) : 0,
             rows[playing].beatsPerBar);
     } catch (e) { schedule(); }
 }
-function fire(index) {
+function fire(index, expectedName) {
     if (!active || !root) return;
     index = Number(index);
     if (index < 0 || index !== Math.floor(index) || index >= root.getcount('scenes')) return;
     var scene = new LiveAPI('live_set scenes ' + index);
-    scene.call('fire');
-    release(scene);
+    try {
+        // Node sends the exact name as one symbol, including spaces/empty names.
+        // Check at the final boundary: our last snapshot can trail Live edits.
+        if (typeof expectedName !== 'string' || text(scene, 'name') !== expectedName) {
+            post('Setlist Touch stale fire ignored at scene ' + index + '\n');
+            return;
+        }
+        scene.call('fire');
+    } catch (e) { post('Setlist Touch fire ignored: ' + e + '\n'); }
+    finally { release(scene); }
 }
 function notifydeleted() {
     active = false;
@@ -170,4 +195,5 @@ function notifydeleted() {
     release(positionObserver); release(root);
     root = null; positionObserver = null; sceneStructure = ''; trackStructure = ''; positionKey = '';
     timingPath = null; rows = []; playing = -1; fired = -1;
+    rowsJSON = null;
 }

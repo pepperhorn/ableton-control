@@ -16,6 +16,7 @@ export function reduce(state, action, set) {
   function select(song) { return {...state, songKey:keyOf(song), songOrder:set.songs.map(keyOf)}; }
   switch (action.type) {
     case 'set': {
+      if (!set.songs.length) return state;
       let song = currentSong(state, set);
       if (!song && !state.songKey) song = set.songs.find(s => s.id === (action.play || {}).playingSongId) || set.songs[0];
       if (!song && state.songKey) {

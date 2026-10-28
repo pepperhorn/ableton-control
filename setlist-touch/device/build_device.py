@@ -22,7 +22,7 @@ window = patch([
     obj('url','prepend url',260,60),
     obj('window-js','js touch-window.js',20,100),
     obj('loaded','loadbang',20,60)
-], [line('url-in','url'),line('url','browser'),line('loaded','window-js')], [100,100,1200,800],
+], [line('url-in','url'),line('url','browser'),line('loaded','window-js'),line('control-in','window-js')], [100,100,1200,800],
     title='Setlist Touch', openinpresentation=1, enablehscroll=0, enablevscroll=0)
 boxes=[
  obj('node','node.script setlist-server.js @autostart 1',20,40),
@@ -33,7 +33,7 @@ boxes=[
  msg('address','Starting Setlist Touch…',260,160,presentation=1,presentation_rect=[8,38,310,22]),
  box('open','live.text',[750,40,60,22],text='Open',texton='Open',mode=0,numinlets=1,numoutlets=2,
      parameter_enable=0,presentation=1,presentation_rect=[8,8,70,25]),
- obj('select-open','sel 1',750,80),msg('open-message','open',750,120),obj('pcontrol','pcontrol',750,160),
+ obj('select-open','sel 1',750,80),msg('open-message','showwindow',750,120),
  obj('window','p touch-window',750,240,patcher=window),
  obj('midiin','midiin',1000,40),obj('midiout','midiout',1000,80),
  # A named dict keeps shared data alive independently of the js wrapper.
@@ -42,10 +42,12 @@ boxes=[
 lines=[line('node','route'),line('route','defer'),line('defer','fire'),line('fire','lom'),
  line('route','address-set',1),line('address-set','address'),line('route','window',2,1),
  line('route','refresh',3),line('thisdevice','refresh'),line('refresh','lom'),line('lom','node'),
- line('open','select-open'),line('select-open','open-message'),line('open-message','pcontrol'),
- line('pcontrol','window'),line('midiin','midiout')]
+ # route -> deferlow -> prepend fire preserves the index AND exact name symbol.
+ line('open','select-open'),line('select-open','open-message'),line('open-message','window'),
+ line('midiin','midiout')]
 data=json.dumps({'patcher':patch(boxes,lines,[100,100,1280,360],openinpresentation=1,devicewidth=330.0)},indent=1,ensure_ascii=False).encode('utf8')
 (HERE/'SetlistTouch.maxpat').write_bytes(data)
 ptch=data+b'\n\x00'
+# SceneNav reference: ampf(4)/mmmm, meta(4)/uint32le(0), ptch(length)/JSON+LF+NUL.
 (HERE/'SetlistTouch.amxd').write_bytes(b'ampf'+struct.pack('<I',4)+b'mmmm'+b'meta'+struct.pack('<I',4)+struct.pack('<I',0)+b'ptch'+struct.pack('<I',len(ptch))+ptch)
 print('wrote SetlistTouch.maxpat, SetlistTouch.amxd')

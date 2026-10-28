@@ -13,7 +13,7 @@ export function render(state, set, play, pos, local) {
   $('.sidebar-toggle').textContent = state.sidebarOpen ? '◀◀ Hide' : '☰ Setlist';
   $('.sidebar-toggle').setAttribute('aria-expanded', String(state.sidebarOpen));
   $('.setlist-sidebar').hidden = !state.sidebarOpen;
-  $('.song-title').textContent = song ? song.title : 'Setlist Touch';
+  $('.song-title').textContent = song ? song.title : state.songKey ? state.songKey.title : 'Setlist Touch';
   $('.lock-toggle').textContent = state.locked ? '🔒 Locked' : 'Lock';
   $('.lock-toggle').setAttribute('aria-pressed', String(state.locked));
   $('.settings-link').hidden = !local;
@@ -42,10 +42,10 @@ export function render(state, set, play, pos, local) {
     songs.append(button);
   }
   const rows = $('.scene-list'); rows.replaceChildren();
-  if (!song || !song.rows.length) rows.append(el('p','scene-empty',song ? 'No sections in this song' : 'Waiting for songs from Live…'));
+  if (!song || !song.rows.length) rows.append(el('p','scene-empty',song ? 'No sections in this song' : state.songKey ? 'Song not in set' : 'Waiting for songs from Live…'));
   for (const row of song ? song.rows : []) {
     const button = el('button', 'scene-row' + (row.isEnd ? ' scene-row-end' : ''));
-    button.type = 'button'; button.dataset.sceneIndex = row.sceneIndex; button.dataset.name = row.name;
+    button.type = 'button'; button.tabIndex = -1; button.dataset.sceneIndex = row.sceneIndex; button.dataset.name = row.name;
     button.style.backgroundColor = row.isEnd ? '#9A9A9A' : '#' + (row.color >>> 0).toString(16).padStart(6,'0').slice(-6);
     const lines = el('span','tile-barlines'); lines.setAttribute('aria-hidden','true');
     if (Number.isFinite(row.loopBeats) && row.loopBeats > 0 && row.beatsPerBar > 0) {
@@ -83,5 +83,4 @@ export function updatePlayback(state, set, play, pos) {
   }
   const now = banner(state, set, play), node = $('.now-playing-banner');
   node.hidden = !now; node.textContent = now ? 'Now playing: ' + now.title : '';
-  fitSceneRows();
 }
