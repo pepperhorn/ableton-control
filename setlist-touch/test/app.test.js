@@ -108,3 +108,32 @@ test('send challenges a bad Host on loopback rather than bypassing authenticatio
  const response=await req(port,'/api/send',sendBody(0.6),{Host:'attacker.example:'+port});
  a.equal(response.status,401);a.match(response.headers['www-authenticate'],/Basic/);a.deepEqual(calls,[]);
 });
+
+const transportState={is_playing:1,record_mode:0,tempo:120,current_song_time:3.5,signature_numerator:6,signature_denominator:8};
+test('transport validates all commands and bridges explicit record targets',async t=>{
+ const {port,bridge}=await setup(t);const calls=[];bridge.transport=(...args)=>calls.push(args);
+ for(const body of [null,{},[],{command:'toggle'},{command:'record'},{command:'record',value:'1'},{command:'record',value:2},{command:'play',value:1}])a.equal((await req(port,'/api/transport',body)).status,400);
+ for(const body of [{command:'play'},{command:'stop'},{command:'record',value:1},{command:'record',value:1},{command:'record',value:0}])a.equal((await req(port,'/api/transport',body)).status,204);
+ a.deepEqual(calls,[['play',undefined],['stop',undefined],['record',1],['record',1],['record',0]]);
+});
+test('transport snapshot waits for Live, replays latest state on connect and coalesces updates',async t=>{
+ const {port,bridge}=await setup(t);const s=stream(port);t.after(()=>s.request.destroy());await s.ready;await req(port,'/');
+ a.equal(s.events.filter(e=>e.startsWith('event: transport')).length,0);
+ bridge.emit('transport',transportState);await req(port,'/');
+ const initial=JSON.parse(s.events.find(e=>e.startsWith('event: transport')).split('data: ')[1]);a.equal(initial.position,'2.2');
+ for(let i=0;i<20;i++)bridge.emit('transport',{...transportState,current_song_time:i});
+ const later=stream(port);t.after(()=>later.request.destroy());await later.ready;await req(port,'/');
+ a.equal(JSON.parse(later.events.find(e=>e.startsWith('event: transport')).split('data: ')[1]).current_song_time,19);
+ await wait(120);const updates=s.events.filter(e=>e.startsWith('event: transport'));a.equal(updates.length,2);
+ a.equal(JSON.parse(updates[1].split('data: ')[1]).current_song_time,19);
+ bridge.emit('transport',{});await req(port,'/');a.equal(s.events.filter(e=>e.startsWith('event: transport')).length,2);
+});
+test('transport requires auth and rejects cross-origin and rebound-host mutations',async t=>{
+ const {port,bridge}=await setup(t,'192.168.1.20');const calls=[];bridge.transport=(...args)=>calls.push(args);
+ const body={command:'stop'},auth={Authorization:'Basic '+Buffer.from('band:pw').toString('base64')};
+ a.equal((await req(port,'/api/transport',body)).status,401);
+ a.equal((await req(port,'/api/transport',body,{...auth,Origin:'http://evil.example'})).status,403);
+ a.deepEqual(calls,[]);a.equal((await req(port,'/api/transport',body,auth)).status,204);
+ const local=await setup(t);a.equal((await req(local.port,'/api/transport',body,{Host:'attacker.example'})).status,401);
+ const empty=await setup(t,'100.64.0.9',true,'');a.equal((await req(empty.port,'/api/transport',body)).status,403);
+});

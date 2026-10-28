@@ -98,5 +98,9 @@ None.
 ---
 ## Receiver ack
 
+Accepted: implement the opt-in transport row on both pages, with Play on a clean tap and Stop/Arrangement Record only after a cancellable 1-second hold. Add the ES5 LiveAPI lane, validated/authenticated HTTP and SSE transport state, deterministic device wiring, fake transport, pure gesture/position tests, and browser verification at both specified viewports. I will change only the declared owned files and task 0003 handoffs, preserve scene/mix behaviour, and return a committed handoff plus draft PR. No open questions.
+
+GBrain was searched for `m4l-control`; it returned no relevant project context. Repository specs and this handoff are the source of truth.
+
 ---
 ## Return (implementer → lead; fill in when done, or in a separate …-to-lead.md)

@@ -41,3 +41,24 @@ test('Node for Max fire carries the name as an intact symbol, including empty na
  a.deepEqual(outlets.filter(o=>o[0]==='fire'),[['fire',1,''],['fire',1,'[N32] AA'],['fire',1,'  padded "name"  ']]);
  await Promise.resolve();
 });
+
+test('transport commands use deferlow and refresh/Node wiring; generator is deterministic',()=>{
+ const p=JSON.parse(fs.readFileSync(path.join(device,'SetlistTouch.maxpat'))).patcher;
+ const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));
+ a.equal(boxes['transport-route'].text,'route transport');a.equal(boxes['transport-defer'].text,'deferlow');a.equal(boxes.transport.text,'js transport.js');
+ for(const [src,dst,outlet] of [['route','transport-route',5],['transport-route','transport-defer',0],['transport-defer','transport',0],['refresh','transport',0],['transport','node',0]])
+  a.ok(p.lines.some(({patchline:l})=>l.source[0]===src&&l.source[1]===outlet&&l.destination[0]===dst));
+ const files=['SetlistTouch.maxpat','SetlistTouch.amxd'],before=files.map(f=>fs.readFileSync(path.join(device,f)));
+ require('child_process').execFileSync('python3',[path.join(device,'build_device.py')]);
+ files.forEach((f,i)=>a.deepEqual(fs.readFileSync(path.join(device,f)),before[i]));
+});
+test('Node for Max passes transport selector/target and forwards observed state',async()=>{
+ const outlets=[],handlers={};let bridge;
+ const max={outlet:(...args)=>outlets.push(args),addHandler:(name,fn)=>handlers[name]=fn};
+ const req=name=>name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listen:()=>Promise.resolve(8765),getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
+ const ctx=vm.createContext({require:req,process:{on:()=>{}}});vm.runInContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'),ctx);
+ bridge.transport('play');bridge.transport('stop');bridge.transport('record',1);bridge.transport('record',0);
+ a.deepEqual(outlets.filter(o=>o[0]==='transport'),[['transport','play'],['transport','stop'],['transport','record',1],['transport','record',0]]);
+ let state;bridge.on('transport',v=>state=v);handlers.transport(1,0,120,3,6,8,'37.2.1.0');a.equal(state.beats_song_time,'37.2.1.0');a.equal(state.current_song_time,3);a.equal(state.signature_denominator,8);
+ await Promise.resolve();
+});

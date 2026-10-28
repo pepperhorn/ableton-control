@@ -27,3 +27,11 @@ body[data-page=mix] .sidebar-toggle,body[data-page=mix] .song-nav,body[data-page
 body[data-page=mix] .page-switch{margin-right:auto}
 @media(max-width:1100px) and (min-width:601px){.setlist-header{flex-wrap:wrap}.page-switch{order:-2}.song-title{order:-1;flex-basis:50%}}
 @media(max-width:600px){.page-switch{order:-2}.page-choice{min-height:36px;padding:7px 10px;font-size:11px}.song-title{flex-basis:100%}.mix-panel{padding:18px 10px 10px;gap:12px}.mix-heading{display:block;padding:0 4px}.mix-title{font-size:22px}.mix-hint{font-size:10px;margin-top:5px}.send-tabs{gap:8px}.send-tab{font-size:13px;padding:8px 20px}.mix-row{min-height:56px;padding:12px}.mix-label{font-size:13px}.mix-value{font-size:11px}.mix-list{gap:9px}}
+
+.transport-bar{display:flex;align-items:center;gap:10px;padding:8px 20px;border-bottom:1px solid #353a44;flex:none;background:#1e2128;min-width:0}
+.transport-bar button{position:relative;isolation:isolate;overflow:hidden;min-width:90px;touch-action:none;user-select:none;-webkit-user-select:none}
+.transport-button-label{position:relative;z-index:1}.transport-hold-hint{display:block;font-size:9px;line-height:1.1;color:#b7c0d0}
+.hold-fill{position:absolute;inset:0;background:#8ba6d84d;transform-origin:left;transform:scaleX(var(--hold-progress,0));pointer-events:none;z-index:0}
+.transport-rec.is-recording{background:#822d3c;border-color:#ff6078;color:#fff}.transport-rec.is-recording .transport-hold-hint{color:#ffd2db}.transport-rec .hold-fill{background:#ff5c7355}
+.transport-playing{font-size:12px;color:#a3adbf;margin-left:auto}.transport-playing.is-playing{color:#8de6a7}.transport-readout{font-size:13px;white-space:nowrap}.transport-tempo-label{font-size:10px;color:#a3adbf}.transport-tempo,.transport-position{font-variant-numeric:tabular-nums}.transport-position{font-size:18px;min-width:5ch;text-align:right}
+@media(max-width:600px){.transport-bar{gap:6px;padding:8px;flex-wrap:wrap}.transport-bar button{flex:1;min-width:80px;padding:7px 10px;font-size:13px}.transport-playing{margin-left:0;flex:1}.transport-readout{font-size:12px}.transport-position{font-size:15px}}

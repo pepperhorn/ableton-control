@@ -1,3 +1,4 @@
+import {createTransportRenderer} from './transport-render.js';
 import {createTapDetector} from './tap.js';
 import {initialMixState, reduceMix} from './mix-view.js';
 import {createMixRenderer} from './mix-render.js';
@@ -15,6 +16,10 @@ const mixUI = createMixRenderer({
   stateOf:() => ({...state,connected:transport && mixSnapshot}), mixOf:() => mix, viewOf:() => mixState,
   onTab:name => dispatchMix({type:'tab',name}), onSnapshot:acceptMix, status
 });
+const transportUI = createTransportRenderer({
+  enabled:new URLSearchParams(location.search).get('transport') === '1',
+  stateOf:() => ({...state, connected:transport}), status
+});
 function savePrefs() { try { localStorage.setItem('setlist-touch',JSON.stringify(prefsOf(state,mixState))); } catch (_) {} }
 function shell() {
   const settingsOpen = location.hash === '#settings' && local;
@@ -25,7 +30,7 @@ function shell() {
   const ready = mixState.page === 'mix' ? mixSnapshot && mix.returns.length > 0 : snapshot;
   $('.connection-bar').hidden = transport && ready;
   $('.connection-bar').textContent = transport ? 'Waiting for Live set…' : 'Reconnecting…';
-  mixUI.syncAvailability();
+  mixUI.syncAvailability(); transportUI.syncAvailability();
 }
 function dispatchMix(action) {
   cancelGestures(); mixState = reduceMix(mixState,action,mix); savePrefs(); mixUI.render(); shell();
@@ -37,7 +42,7 @@ function acceptMix(next) {
   mix = next; mixJSON = serialized; mixState = reduceMix(mixState,{type:'mix'},mix);
   savePrefs(); mixUI.render(); shell();
 }
-function cancelGestures() { for (const id of pointers) detector.move(id, Infinity, Infinity); mixUI.cancel(); }
+function cancelGestures() { for (const id of pointers) detector.move(id, Infinity, Infinity); mixUI.cancel(); transportUI.cancel(); }
 function dispatch(action) {
   cancelGestures(); state = reduce(state, action, set);
   savePrefs();
@@ -85,8 +90,9 @@ document.addEventListener('keydown',e=>{if(e.key===' ' && !(e.target instanceof 
 $('.scene-list').addEventListener('mousedown',e=>e.preventDefault());
 new ResizeObserver(fitSceneRows).observe($('.scene-list'));
 const events = new EventSource('/api/events');
-events.addEventListener('open',()=>{transport=true;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
-events.addEventListener('error',()=>{transport=false;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
+events.addEventListener('open',()=>{transportUI.reset();transport=true;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
+events.addEventListener('error',()=>{transportUI.reset();transport=false;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
+events.addEventListener('transport',e=>transportUI.accept(JSON.parse(e.data)));
 events.addEventListener('mix',e=>acceptMix(JSON.parse(e.data)));
 events.addEventListener('level',e=>{
   const level=JSON.parse(e.data), strip=mix.strips.find(s=>s.trackIndex===level.trackIndex);
@@ -121,7 +127,7 @@ window.addEventListener('hashchange',settings);settings();
 $('.settings-form').addEventListener('submit',async e=>{
   e.preventDefault();const form=e.currentTarget;const cfg={port:Number(form.elements.port.value),username:form.elements.username.value,password:form.elements.password.value};
   const button=$('.settings-save');button.disabled=true;
-  try {const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});if(!res.ok)throw new Error(await res.text());$('.settings-status').textContent='Saved.';if(cfg.port!==Number(location.port||80))location.href=`http://${location.hostname}:${cfg.port}/#settings`;}
+  try {const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});if(!res.ok)throw new Error(await res.text());$('.settings-status').textContent='Saved.';if(cfg.port!==Number(location.port||80))location.href=`http://${location.hostname}:${cfg.port}/${location.search}#settings`;}
   catch(error){$('.settings-status').textContent=error.message||'Could not save settings.';}
   finally{button.disabled=false;}
 });

@@ -11,6 +11,10 @@ bridge.setSend = (trackIndex, returnIndex, value) => {
   const ret = lastMix.returns.find(r => r.index === returnIndex);
   if (track && ret) max.outlet('send', trackIndex, returnIndex, value, track.name, ret.name);
 };
+bridge.transport = (command, value) => command === 'record' ? max.outlet('transport', command, value) : max.outlet('transport', command);
+max.addHandler('transport', (is_playing, record_mode, tempo, current_song_time, signature_numerator, signature_denominator, beats_song_time) => {
+  bridge.emit('transport', {is_playing, record_mode, tempo, current_song_time, signature_numerator, signature_denominator, beats_song_time});
+});
 bridge.fire = (index, name) => max.outlet('fire', index, name);
 let sceneRead = Promise.resolve();
 max.addHandler('scenes', () => {

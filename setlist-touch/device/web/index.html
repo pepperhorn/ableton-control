@@ -17,6 +17,14 @@
 <button class="lock-toggle" type="button" aria-pressed="false">Lock</button>
 <a class="settings-link" href="#settings" hidden aria-label="Settings">⚙</a>
 </header>
+<section class="transport-bar" aria-label="Live transport" hidden>
+<button class="transport-play" type="button" disabled aria-label="Play">▶ Play</button>
+<button class="transport-stop" type="button" disabled aria-label="Stop (hold 1 second)"><span class="hold-fill" aria-hidden="true"></span><span class="transport-button-label">■ Stop<small class="transport-hold-hint">Hold 1s</small></span></button>
+<button class="transport-rec" type="button" disabled aria-pressed="false" aria-label="Enable Arrangement Record (hold 1 second)"><span class="hold-fill" aria-hidden="true"></span><span class="transport-button-label">● Rec<small class="transport-hold-hint">Hold 1s</small></span></button>
+<span class="transport-playing">Waiting…</span>
+<span class="transport-readout"><span class="transport-tempo-label">BPM</span> <span class="transport-tempo">—</span></span>
+<span class="transport-position" aria-label="Song position">—</span>
+</section>
 <main class="setlist-main">
 <aside class="setlist-sidebar" id="setlist-sidebar" aria-label="Setlist">
 <div class="filter-pills" aria-label="Categories"></div><nav class="setlist-songs" aria-label="Songs"></nav>
