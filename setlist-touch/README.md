@@ -49,6 +49,12 @@ Tags such as `[V4]`, `[N32]`, and `[S]` are only labels. This device never edits
 - Sidebar, category filter and lock persist per browser in localStorage. The current song is preserved across set edits by title and duplicate occurrence. Empty snapshots keep the last song visible with launching disabled until a real set returns. Deletion in a nonempty set chooses the nearest surviving following song, otherwise the preceding song.
 - Re-tapping a playing scene calls Live's normal `fire`, including its quantisation/restart behaviour. Requests carry the row index and exact name; a changed or removed row returns 409 and requires a new tap. LiveAPI checks the exact name again immediately before firing; edits that have not reached Node yet are ignored and logged in the Max console.
 
+## Transport
+
+Bookmark `http://localhost:8765/?transport=1` (or the phone's usual authenticated address with `?transport=1`) to show Live transport on both Scenes and My mix. Other screens keep their current layout. Play needs a clean tap; Stop and Arrangement Record need a 1-second hold, with a visible fill, in either recording direction. Releasing early, leaving the button, a second pointer anywhere, locking, losing the connection or leaving the window cancels an unfinished gesture. Keyboard clicks do not operate transport; Space stays inert outside settings inputs.
+
+The row shows Live's playing/Arrangement Record state, tempo and one-based `bar.beat` position using the current time signature (six eighth-note beats per 6/8 bar). Updates are limited to 10 Hz. Buttons require the existing unlocked/connected state and a fresh transport snapshot. Recording requests carry an explicit 0/1 target, so repeats cannot flip recording. This controls Arrangement Record, not Session record, and does not edit tempo or stop all clips. The development fixture simulates and logs these commands; actual Live transport and Windows touch remain user acceptance checks.
+
 ## Development and validation
 
 Runtime uses only Node built-ins and Max-provided `max-api`, targets Node 16+, and has no npm runtime dependencies. Classic `lom.js` and the window helper are ES5. Browser files are ES modules with no build step. Poppins 400/600/700 WOFF2 files and their SIL OFL licence are bundled locally.

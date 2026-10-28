@@ -7,6 +7,7 @@ const bridge = createFakeBridge(fixture, require('./lib/fixture-mix.json')), con
 if (process.env.SETLIST_TOUCH_PORT) config.port = Number(process.env.SETLIST_TOUCH_PORT);
 const app = createApp({bridge, config});
 bridge.on('setSend', value => console.log('setSend', JSON.stringify(value)));
+bridge.on('transportCommand', value => console.log('transport', JSON.stringify(value)));
 bridge.on('fire', index => console.log('fire', index));
 app.listen(config.port).then(port => {
   console.log(`Setlist Touch fixture: http://localhost:${port}/ (0.0.0.0)`);

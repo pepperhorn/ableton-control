@@ -3,6 +3,7 @@ const http = require('http'), fs = require('fs'), path = require('path');
 const {parseSet} = require('./parse-set');
 const {progress} = require('./progress');
 const {parseMix} = require('./parse-mix');
+const {parseTransport, validCommand} = require('./transport');
 const {authorize, isTrustedLoopback} = require('./auth');
 const {loadConfig, saveConfig: persist, validConfig} = require('./config');
 function createApp({bridge, config = loadConfig(), saveConfig = persist,
@@ -10,6 +11,17 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   let cfg = {...config}, parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
   let setJSON = null, mix = parseMix(), mixJSON = null;
+  let transport = null, transportTimer = null, lastTransport = 0;
+  function onTransport(raw) {
+    const next = parseTransport(raw);
+    if (!next) return;
+    transport = next;
+    const flush = () => { transportTimer = null; lastTransport = Date.now(); broadcast('transport', transport); };
+    const delay = 100 - (Date.now() - lastTransport);
+    if (delay <= 0) { clearTimeout(transportTimer); flush(); }
+    else if (!transportTimer) transportTimer = setTimeout(flush, delay);
+  }
+  bridge.on('transport', onTransport);
   const sends = new Map(), levelUpdates = new Map();
   const clients = new Set(), servers = new Set(), sockets = new Set();
   const send = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -112,7 +124,13 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         clients.add(res); if (setJSON !== null) send(res, 'set', parsed);
         send(res, 'mix', mix);
         send(res, 'play', play); if (pos) send(res, 'pos', pos);
+        if (transport) send(res, 'transport', transport);
         res.on('close', () => clients.delete(res)); return;
+      }
+      if (route === '/api/transport' && req.method === 'POST') {
+        let value; try { value = await body(req); } catch (_) { return reply(res, 400, 'Invalid JSON'); }
+        if (!validCommand(value)) return reply(res, 400, 'Invalid transport command');
+        bridge.transport(value.command, value.value); return reply(res, 204);
       }
       if (route === '/api/fire' && req.method === 'POST') {
         let value; try { value = await body(req); } catch (_) { return reply(res, 400, 'Invalid JSON'); }
@@ -182,7 +200,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     async listen(port) { if (closed) throw new Error('App closed'); active = await start(port); return active.address().port; },
     getConfig() { return {...cfg}; },
     async close() {
-      if (closed) return; closed = true; clearInterval(ping); clearTimeout(posTimer);
+      if (closed) return; closed = true; clearInterval(ping); clearTimeout(posTimer); clearTimeout(transportTimer);
+      bridge.removeListener('transport', onTransport);
       bridge.removeListener('mix', onMix); bridge.removeListener('level', onLevel);
       for (const entry of [...sends.values(), ...levelUpdates.values()]) clearTimeout(entry.timer);
       bridge.removeListener('scenes', onScenes); bridge.removeListener('play', onPlay); bridge.removeListener('pos', onPos);
