@@ -18,12 +18,12 @@ def patch(boxes, lines, rect, **kw):
                 classnamespace='box', rect=rect, boxes=boxes, lines=lines, **kw)
 window = patch([
     obj('control-in','inlet',20,20),obj('url-in','inlet',260,20),
-    box('browser','jweb',[0,0,1200,800],url='about:blank',varname='browser'),
+    box('browser','jweb',[0,0,1200,800],url='about:blank',varname='browser',presentation=1,presentation_rect=[0,0,1200,800]),
     obj('url','prepend url',260,60),
     obj('window-js','js touch-window.js',20,100),
     obj('loaded','loadbang',20,60)
 ], [line('url-in','url'),line('url','browser'),line('loaded','window-js')], [100,100,1200,800],
-    title='Setlist Touch', enablehscroll=0, enablevscroll=0)
+    title='Setlist Touch', openinpresentation=1, enablehscroll=0, enablevscroll=0)
 boxes=[
  obj('node','node.script setlist-server.js @autostart 1',20,40),
  obj('route','route fire address url ready',20,80),

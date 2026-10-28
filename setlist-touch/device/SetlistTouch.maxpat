@@ -269,7 +269,14 @@
           800
          ],
          "url": "about:blank",
-         "varname": "browser"
+         "varname": "browser",
+         "presentation": 1,
+         "presentation_rect": [
+          0,
+          0,
+          1200,
+          800
+         ]
         }
        },
        {
@@ -351,6 +358,7 @@
        }
       ],
       "title": "Setlist Touch",
+      "openinpresentation": 1,
       "enablehscroll": 0,
       "enablevscroll": 0
      }

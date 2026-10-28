@@ -10,6 +10,9 @@ function bang() {
 function fit() {
     var size = this.patcher.wind.size;
     var browser = this.patcher.getnamed('browser');
-    if (browser && size) browser.rect = [0, 0, size[0], size[1]];
+    if (browser && size) {
+        browser.rect = [0, 0, size[0], size[1]];
+        browser.setboxattr('presentation_rect', [0, 0, size[0], size[1]]);
+    }
 }
 function notifydeleted() { if (resizeTask) resizeTask.cancel(); }
