@@ -67,5 +67,7 @@ None.
 ---
 ## Receiver ack
 
+Codex, 2026-10-29: I will implement T1, T2 and T3 in order on `orch/0002-in-ear-mix`: the validated mix snapshot/send lane, ES5 LiveAPI observer and deferred wiring, then safe relative fader pages sharing phase 1 auth, connection and lock. Only the plan-owned files and task handoffs will change. I will fix Space typing in settings and the connected empty-set message, run the complete tests and device build, exercise phone/laptop headless browsers, and open a draft PR with a committed return handoff. Real Live routing, send-label and device checks remain for the user. No open questions. GBrain searched for `m4l-control`; no relevant pages returned.
+
 ---
 ## Return (implementer → lead; fill in when done, or in a separate …-to-lead.md)
