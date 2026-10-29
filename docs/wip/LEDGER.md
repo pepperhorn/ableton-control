@@ -13,7 +13,7 @@ Next ID: 0008
 | 0003 | Transport header | https://github.com/pepperhorn/ableton-control/pull/3 | 2026-10-29 (squash of reviewed bfd084a) | Opus approved r2. Optional: extra lost-pointer safeguard (transport-render.js:66). Verify in Live: get_current_beats_song_time format, play/stop idempotence, Arrangement Record toggle. |
 | 0002 | In-ear mix pages (phase 2) | https://github.com/pepperhorn/ableton-control/pull/2 | 2026-10-29 (22b634a, squash of reviewed cd24b83) | Opus approved r2. Optional nits: late mid-drag echo or cancel() clears release hold early. Needs user verification in Live 12/Windows: routing JSON and Main/Master name, echo latency vs 1 s hold, send labels, touch. |
 | 0001 | Setlist Touch (phase 1) | https://github.com/pepperhorn/ableton-control/pull/1 | 2026-10-29 (e2bc976, squash of reviewed a3f2853) | Opus approved r2. Minor follow-ups folded into 0002: Space blocked in settings inputs; extra LiveAPI reads per position update; empty set shows Reconnecting. Needs user verification in Live on Windows (touch in jweb, END-row empty name, window open/resize). |
-| 0007 | 0005 review follow-ups (mix fader-dead window, status quotes, double startup index, tracks-only re-index, bulk release, error back-off) | in-review | codex/gpt-6.1-sol | orch/0007-index-followups | https://github.com/pepperhorn/ableton-control/pull/5 (head 5a2faf7) | /home/shaun/.t3/worktrees/m4l-control/t3-63b03fd2 | thread:delegated-task:command%3Amcp%3Ad5f78977-ab82-47e2-a4a5-0a5fee001abb%3Adelegate-task%3A0007-impl-r1 | docs/specs/0005-large-set-performance.md | in handoff | docs/handoffs/2026-10-29-0007-index-followups--lead-to-codex.md | 2026-10-29 |
+| 0007 | 0005 review follow-ups (mix fader-dead window, status quotes, double startup index, tracks-only re-index, bulk release, error back-off) | in-review | codex/gpt-6.1-sol | orch/0007-index-followups | https://github.com/pepperhorn/ableton-control/pull/5 (head 8de8c00) | /home/shaun/.t3/worktrees/m4l-control/t3-63b03fd2 | thread:delegated-task:command%3Amcp%3Ad5f78977-ab82-47e2-a4a5-0a5fee001abb%3Adelegate-task%3A0007-impl-r1 | docs/specs/0005-large-set-performance.md | in handoff | docs/handoffs/2026-10-29-0007-index-followups--lead-to-codex.md | 2026-10-29 |
 | 0006 | "Build timing clips" button: fill empty slots on the device's own track with empty MIDI clips sized from [N32]-style tags or a chosen reference track; one undo step; skips existing clips (delete a clip + rerun = regen); device track becomes the timing track | proposed (after 0005) | — | — | — | — | — | — | — | — | 2026-10-29 |
 | 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
 
@@ -24,6 +24,7 @@ Next ID: 0008
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-10-29 0007 in-review — Opus r1 approve (5a2faf7) w/ 2 small findings; lead fixed in 8de8c00 (stale Dict on ready, return-list fail-closed); Sol review r2
 2026-10-29 0007 dispatched→in-review — PR #5 head 5a2faf7, 134 tests; Opus review r1
 2026-10-29 0007 proposed→dispatched — user: go; Sol in worktree
 2026-10-29 0007 →proposed — Opus r1 non-blocking findings on PR #4
