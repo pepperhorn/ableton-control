@@ -46,7 +46,7 @@ test('transport commands use deferlow and refresh/Node wiring; generator is dete
  const p=JSON.parse(fs.readFileSync(path.join(device,'SetlistTouch.maxpat'))).patcher;
  const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));
  a.equal(boxes['transport-route'].text,'route transport');a.equal(boxes['transport-defer'].text,'deferlow');a.equal(boxes.transport.text,'js transport.js');
- for(const [src,dst,outlet] of [['route','transport-route',5],['transport-route','transport-defer',0],['transport-defer','transport',0],['refresh','transport',0],['transport','node',0]])
+ for(const [src,dst,outlet] of [['route','transport-route',6],['transport-route','transport-defer',0],['transport-defer','transport',0],['refresh','transport',0],['transport','node',0]])
   a.ok(p.lines.some(({patchline:l})=>l.source[0]===src&&l.source[1]===outlet&&l.destination[0]===dst));
  const files=['SetlistTouch.maxpat','SetlistTouch.amxd'],before=files.map(f=>fs.readFileSync(path.join(device,f)));
  require('child_process').execFileSync('python3',[path.join(device,'build_device.py')]);
@@ -61,4 +61,26 @@ test('Node for Max passes transport selector/target and forwards observed state'
  a.deepEqual(outlets.filter(o=>o[0]==='transport'),[['transport','play'],['transport','stop'],['transport','record',1],['transport','record',0]]);
  let state;bridge.on('transport',v=>state=v);handlers.transport(1,0,120,3,6,8,'37.2.1.0');a.equal(state.beats_song_time,'37.2.1.0');a.equal(state.current_song_time,3);a.equal(state.signature_denominator,8);
  await Promise.resolve();
+});
+
+test('progress routes to device status and completion restores the latest address after the scenes Dict',async()=>{
+ const p=JSON.parse(fs.readFileSync(path.join(device,'SetlistTouch.maxpat'))).patcher;
+ const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));
+ a.equal(boxes['index-status'].text,'sprintf symout Indexing scenes %ld / %ld…');
+ for(const [src,dst,outlet] of [['route','index-status',5],['index-status','address-set',0],['address-set','address',0]])
+  a.ok(p.lines.some(({patchline:l})=>l.source[0]===src&&l.source[1]===outlet&&l.destination[0]===dst));
+ const outlets=[],handlers=[],events=[];let bridge,resolveDict;
+ const max={outlet:(...args)=>outlets.push(args),addHandler:(name,fn)=>handlers[name]=fn,
+  getDict:()=>new Promise(resolve=>resolveDict=resolve),post:()=>{}};
+ const req=name=>name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listen:()=>Promise.resolve(8765),getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
+ vm.runInNewContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'),{require:req,process:{on:()=>{}}});
+ await new Promise(r=>setImmediate(r));const address=outlets.find(o=>o[0]==='address')[1];
+ bridge.on('progress',v=>events.push(['progress',v.done]));bridge.on('scenes',()=>events.push(['scenes']));
+ handlers.progress(340,683);await new Promise(r=>setImmediate(r));
+ a.deepEqual(outlets.at(-1),['progress',340,683]);
+ bridge.addressChanged(5250);a.deepEqual(outlets.filter(o=>o[0]==='address').at(-1),['address',address]);
+ handlers.scenes();handlers.progress(683,683);await new Promise(r=>setImmediate(r));
+ a.equal(events.length,1);resolveDict({scenes:'[]'});await new Promise(r=>setImmediate(r));
+ a.deepEqual(events,[['progress',340],['scenes'],['progress',683]]);
+ a.ok(outlets.at(-1)[1].endsWith(':5250'));a.equal(outlets.at(-1)[0],'address');
 });

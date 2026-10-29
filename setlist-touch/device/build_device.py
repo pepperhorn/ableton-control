@@ -26,7 +26,7 @@ window = patch([
     title='Setlist Touch', openinpresentation=1, enablehscroll=0, enablevscroll=0)
 boxes=[
  obj('node','node.script setlist-server.js @autostart 1',20,40),
- obj('route','route fire address url ready send',20,80),
+ obj('route','route fire address url ready send progress',20,80),
  obj('defer','deferlow',20,120),obj('fire','prepend fire',20,160),
  obj('send-defer','deferlow',260,280),obj('send','prepend send',260,320),
  obj('mix','js mix.js',500,320),obj('mix-dict','dict setlist_touch_mix',750,320),
@@ -34,6 +34,7 @@ boxes=[
  obj('transport','js transport.js',1000,240),
  obj('lom','js lom.js',20,240),obj('thisdevice','live.thisdevice',500,40),
  msg('refresh','refresh',500,80),obj('address-set','prepend set',260,120),
+ obj('index-status','sprintf symout Indexing scenes %ld / %ld…',260,200),
  msg('address','Starting Setlist Touch…',260,160,presentation=1,presentation_rect=[8,38,310,22]),
  box('open','live.text',[750,40,60,22],text='Open',texton='Open',mode=0,numinlets=1,numoutlets=2,
      parameter_enable=0,presentation=1,presentation_rect=[8,8,70,25]),
@@ -51,7 +52,8 @@ lines=[line('node','route'),line('route','defer'),line('defer','fire'),line('fir
  line('midiin','midiout'),line('route','send-defer',4),line('send-defer','send'),line('send','mix'),
  line('refresh','mix'),line('mix','node'),
  # Preserve existing selectors; the unmatched outlet feeds the transport lane.
- line('route','transport-route',5),line('transport-route','transport-defer'),
+ line('route','index-status',5),line('index-status','address-set'),
+ line('route','transport-route',6),line('transport-route','transport-defer'),
  line('transport-defer','transport'),line('refresh','transport'),line('transport','node')]
 data=json.dumps({'patcher':patch(boxes,lines,[100,100,1280,360],openinpresentation=1,devicewidth=330.0)},indent=1,ensure_ascii=False).encode('utf8')
 (HERE/'SetlistTouch.maxpat').write_bytes(data)

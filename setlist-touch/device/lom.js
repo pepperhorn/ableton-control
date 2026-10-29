@@ -1,12 +1,16 @@
-// Classic Max js (ES5). All LiveAPI work starts after live.thisdevice/Node ready.
+// Classic Max js (ES5). Bound synchronous LiveAPI work to small Task slices.
 autowatch = 1;
 inlets = 1;
 outlets = 1;
-var root = null, scenesDict = null, debounce = null, poll = null;
-var rootObservers = [], sceneObservers = [], trackObservers = [];
-var positionObserver = null, sceneStructure = '', trackStructure = '';
-var timingPath = null, rows = [], playing = -1, fired = -1;
-var positionKey = '', rowsJSON = null, building = false, active = false;
+var CHUNK = 3, SLICE_MS = 15, PROGRESS_MS = 120, SWEEP_MS = 1000;
+var root = null, scenesDict = null, work = null, sweep = null;
+var rootObservers = [], sceneObservers = [], trackObservers = [], retired = [];
+var positionObserver = null, timingPath = null, timingCount = 0;
+var rows = [], overrides = [], playing = -1, fired = -1;
+var positionKey = '', rowsJSON = null, active = false, subscribing = false;
+var scan = null, generation = 0, dirtyScenes = {}, dirtyTiming = {}, sweepIndex = 0;
+var playbackPending = false;
+var songBeats = 4, signatureDirty = false, progressElapsed = 0;
 
 function scalar(api, property) {
     var value = api.get(property);
@@ -18,158 +22,216 @@ function text(api, property) {
 }
 function release(api) {
     if (!api) return;
-    try { api.property = ''; api.id = 0; } catch (e) {}
+    try { api.property = ''; } catch (e) {}
+    try { api.id = 0; } catch (e) {}
 }
 function releaseAll(list) {
-    var i;
-    for (i = 0; i < list.length; i++) release(list[i]);
-    list.length = 0;
+    while (list.length) release(list.pop());
 }
 function watch(path, property, callback, list) {
-    var api = new LiveAPI(callback, path);
-    api.property = property;
-    list.push(api);
-    return api;
+    var api = null, previous = subscribing;
+    subscribing = true;
+    try {
+        api = new LiveAPI(callback, path);
+        list.push(api); api.property = property;
+        return api;
+    } catch (e) {
+        if (api) { list.pop(); release(api); }
+        throw e;
+    } finally { subscribing = previous; }
 }
-function schedule() {
-    if (!active || building) return;
-    debounce.cancel();
-    debounce.schedule(200);
+function requestWork(delay) {
+    if (active) { work.cancel(); work.schedule(delay || SLICE_MS); }
+}
+function readSignature() {
+    var n = Number(scalar(root, 'signature_numerator'));
+    var d = Number(scalar(root, 'signature_denominator'));
+    songBeats = n > 0 && d > 0 ? n * 4 / d : 4;
+}
+function signatureChanged() {
+    if (!active || subscribing) return;
+    signatureDirty = true; requestWork();
+}
+function sceneChanged(index, version) {
+    if (!active || subscribing || version !== generation) return;
+    dirtyScenes[index] = true; requestWork(200);
+}
+function observeScene(index) {
+    var version = generation, path = 'live_set scenes ' + index;
+    var callback = function () { sceneChanged(index, version); };
+    watch(path, 'name', callback, sceneObservers);
+    watch(path, 'color', callback, sceneObservers);
+    watch(path, 'time_signature_enabled', callback, sceneObservers);
+    watch(path, 'time_signature_numerator', callback, sceneObservers);
+    watch(path, 'time_signature_denominator', callback, sceneObservers);
 }
 function refresh() {
-    notifydeleted();
+    // Refresh may arrive after Node starts while another scan is running.
+    // Cancel immediately, but drain the many scene observers in bounded work ticks.
+    if (work) work.cancel(); if (sweep) sweep.cancel();
+    retired = retired.concat(sceneObservers); sceneObservers = [];
+    releaseAll(rootObservers); releaseAll(trackObservers); release(positionObserver); release(root);
+    positionObserver = null; positionKey = ''; timingPath = null; rowsJSON = null;
     active = true;
-    root = new LiveAPI('live_set');
-    scenesDict = new Dict('setlist_touch_scenes');
-    debounce = new Task(rebuild, this);
-    poll = new Task(pollTiming, this);
-    poll.interval = 5000;
-    building = true;
-    watch('live_set', 'scenes', schedule, rootObservers);
-    watch('live_set', 'tracks', schedule, rootObservers);
-    watch('live_set', 'signature_numerator', schedule, rootObservers);
-    watch('live_set', 'signature_denominator', schedule, rootObservers);
-    building = false;
-    rebuild();
-    poll.repeat();
+    root = new LiveAPI('live_set'); scenesDict = new Dict('setlist_touch_scenes');
+    work = new Task(workTick, this); sweep = new Task(sweepTick, this);
+    watch('live_set', 'scenes', rebuild, rootObservers);
+    watch('live_set', 'tracks', rebuild, rootObservers);
+    watch('live_set', 'signature_numerator', signatureChanged, rootObservers);
+    watch('live_set', 'signature_denominator', signatureChanged, rootObservers);
+    rebuild(); sweep.schedule(SWEEP_MS);
 }
 function clipAt(index) {
-    if (!timingPath || index < 0 || index >= rows.length) return null;
-    var path = timingPath + ' clip_slots ' + index;
-    var slot = new LiveAPI(path);
-    var hasClip = Number(scalar(slot, 'has_clip')) === 1;
-    release(slot);
-    return hasClip ? new LiveAPI(path + ' clip') : null;
+    if (!timingPath || index < 0 || index >= timingCount) return null;
+    var path = timingPath + ' clip_slots ' + index, slot = null;
+    try {
+        slot = new LiveAPI(path);
+        return Number(scalar(slot, 'has_clip')) === 1 ? new LiveAPI(path + ' clip') : null;
+    } finally { release(slot); }
 }
 function beatTiming(clip) {
     return Number(scalar(clip, 'is_audio_clip')) === 0 || Number(scalar(clip, 'warping')) === 1;
 }
-function pollTiming() { rebuild(true); }
-function rebuild(timingOnly) {
-    if (!active || building) return;
-    building = true;
+function loopAt(index) {
+    var clip = null;
     try {
-        var sceneIds = root.get('scenes'), trackIds = root.get('tracks');
-        var sceneKey = String(sceneIds), trackKey = String(trackIds);
-        var sceneCount = root.getcount('scenes'), trackCount = root.getcount('tracks');
-        var changedScenes = sceneKey !== sceneStructure;
-        var changedTracks = trackKey !== trackStructure;
-        timingPath = trackCount ? 'live_set tracks ' + (trackCount - 1) : null;
-        var songNumerator = Number(scalar(root, 'signature_numerator'));
-        var songDenominator = Number(scalar(root, 'signature_denominator'));
-        var next = [], i, scene, clip, enabled, numerator, denominator, loopStart, loopEnd, metadata, beats;
-        // clipAt uses the current scene count while the list is being rebuilt.
-        rows.length = sceneCount;
-        for (i = 0; i < sceneCount; i++) {
-            scene = null;
-            if (timingOnly && !changedScenes && !changedTracks && rows[i]) metadata = rows[i];
-            else {
-                scene = new LiveAPI('live_set scenes ' + i);
-                enabled = Number(scalar(scene, 'time_signature_enabled')) === 1;
-                numerator = enabled ? Number(scalar(scene, 'time_signature_numerator')) : songNumerator;
-                denominator = enabled ? Number(scalar(scene, 'time_signature_denominator')) : songDenominator;
-                metadata = {name:text(scene, 'name'), color:Number(scalar(scene, 'color')),
-                    beatsPerBar:numerator > 0 && denominator > 0 ? numerator * 4 / denominator : 4};
+        clip = clipAt(index);
+        if (!clip || !beatTiming(clip)) return null;
+        var start = Number(scalar(clip, 'loop_start')), end = Number(scalar(clip, 'loop_end'));
+        return end > start ? end - start : null;
+    } finally { release(clip); }
+}
+function readScene(index, target, signatures) {
+    var scene = new LiveAPI('live_set scenes ' + index);
+    try {
+        var enabled = Number(scalar(scene, 'time_signature_enabled')) === 1;
+        var n = enabled ? Number(scalar(scene, 'time_signature_numerator')) : 0;
+        var d = enabled ? Number(scalar(scene, 'time_signature_denominator')) : 0;
+        signatures[index] = enabled ? (n > 0 && d > 0 ? n * 4 / d : 4) : null;
+        target[index] = {index:index, name:text(scene, 'name'), color:Number(scalar(scene, 'color')),
+            loopBeats:loopAt(index), beatsPerBar:signatures[index] === null ? songBeats : signatures[index]};
+    } finally { release(scene); }
+}
+function publish() {
+    var serialized = JSON.stringify(rows);
+    if (serialized === rowsJSON) return;
+    scenesDict.set('scenes', serialized); rowsJSON = serialized; outlet(0, 'scenes');
+}
+function rebuild() {
+    if (!active || subscribing) return;
+    // Retire old generations in bounded batches; their callbacks are inert immediately.
+    generation++; work.cancel();
+    retired = retired.concat(sceneObservers); sceneObservers = [];
+    dirtyScenes = {}; dirtyTiming = {}; signatureDirty = false;
+    timingCount = root.getcount('scenes');
+    var count = root.getcount('tracks'), path = count ? 'live_set tracks ' + (count - 1) : null;
+    readSignature();
+    releaseAll(trackObservers); release(positionObserver); positionObserver = null; positionKey = '';
+    timingPath = path;
+    if (timingPath) {
+        watch(timingPath, 'playing_slot_index', playbackChanged, trackObservers);
+        watch(timingPath, 'fired_slot_index', playbackChanged, trackObservers);
+    }
+    scan = {index:0, total:timingCount, rows:[], overrides:[]};
+    progressElapsed = 0; outlet(0, 'progress', 0, timingCount);
+    requestWork(); playbackChanged();
+}
+function hasEntries(map) { for (var key in map) if (map.hasOwnProperty(key)) return true; return false; }
+function workTick() {
+    if (!active) return;
+    try {
+        // At most 30 releases (60 property/id writes), with no scene reads this tick.
+        if (retired.length) {
+            for (var r = 0; r < CHUNK * 10 && retired.length; r++) release(retired.pop());
+            requestWork(); return;
+        }
+        if (playbackPending) { playbackPending = false; playbackChanged(); return; }
+        var i, key, count = 0, target = scan ? scan.rows : rows, signatures = scan ? scan.overrides : overrides;
+        if (signatureDirty) { readSignature(); signatureDirty = false; }
+        if (scan && scan.index < scan.total) {
+            for (; count < CHUNK && scan.index < scan.total; count++, scan.index++) {
+                i = scan.index; readScene(i, target, signatures); observeScene(i); delete dirtyScenes[i];
             }
-            clip = clipAt(i);
-            beats = clip && beatTiming(clip);
-            loopStart = beats ? Number(scalar(clip, 'loop_start')) : 0;
-            loopEnd = beats ? Number(scalar(clip, 'loop_end')) : 0;
-            next.push({index:i, name:metadata.name, color:metadata.color,
-                loopBeats:clip && loopEnd > loopStart ? loopEnd - loopStart : null,
-                beatsPerBar:metadata.beatsPerBar});
-            release(scene); release(clip);
-        }
-        rows = next;
-        var serialized = JSON.stringify(rows);
-        if (serialized !== rowsJSON) {
-            scenesDict.set('scenes', serialized);
-            rowsJSON = serialized;
-            outlet(0, 'scenes');
-        }
-        if (changedScenes) {
-            releaseAll(sceneObservers);
-            for (i = 0; i < sceneCount; i++) {
-                watch('live_set scenes ' + i, 'name', schedule, sceneObservers);
-                watch('live_set scenes ' + i, 'color', schedule, sceneObservers);
-                watch('live_set scenes ' + i, 'time_signature_enabled', schedule, sceneObservers);
-                watch('live_set scenes ' + i, 'time_signature_numerator', schedule, sceneObservers);
-                watch('live_set scenes ' + i, 'time_signature_denominator', schedule, sceneObservers);
+            progressElapsed += SLICE_MS;
+            if (scan.index < scan.total && progressElapsed >= PROGRESS_MS) {
+                outlet(0, 'progress', scan.index, scan.total); progressElapsed = 0;
             }
-            sceneStructure = sceneKey;
-        }
-        if (changedTracks) {
-            releaseAll(trackObservers);
-            release(positionObserver); positionObserver = null; positionKey = '';
-            if (timingPath) {
-                watch(timingPath, 'playing_slot_index', playbackChanged, trackObservers);
-                watch(timingPath, 'fired_slot_index', playbackChanged, trackObservers);
+        } else {
+            for (key in dirtyScenes) if (dirtyScenes.hasOwnProperty(key) && count < CHUNK) {
+                i = Number(key); delete dirtyScenes[key];
+                if (i < target.length) { readScene(i, target, signatures); count++; }
             }
-            trackStructure = trackKey;
+            for (key in dirtyTiming) if (dirtyTiming.hasOwnProperty(key) && count < CHUNK) {
+                i = Number(key); delete dirtyTiming[key];
+                if (i < target.length) { target[i].loopBeats = loopAt(i); count++; }
+            }
         }
-    } catch (e) { post('Setlist Touch refresh: ' + e + '\n'); }
-    building = false;
-    playbackChanged();
+        // Signature defaults are cached; no per-scene LiveAPI reads on a global change.
+        for (i = 0; i < target.length; i++) if (signatures[i] === null) target[i].beatsPerBar = songBeats;
+        if (scan && scan.index === scan.total && !hasEntries(dirtyScenes) && !hasEntries(dirtyTiming)) {
+            rows = target; overrides = signatures;
+            var total = scan.total; scan = null; publish(); outlet(0, 'progress', total, total);
+            // Playback is a separate bounded tick from the last scene slice.
+            playbackPending = true; requestWork(); return;
+        }
+        if (!scan) publish();
+        if (scan || hasEntries(dirtyScenes) || hasEntries(dirtyTiming)) requestWork();
+    } catch (e) {
+        post('Setlist Touch refresh: ' + e + '\n');
+        // Keep the last complete snapshot. Retry from a clean generation.
+        rebuild();
+    }
+}
+function sweepTick() {
+    if (!active) return;
+    if (!scan && rows.length) {
+        for (var i = 0; i < CHUNK; i++) {
+            dirtyTiming[sweepIndex] = true; sweepIndex = (sweepIndex + 1) % rows.length;
+        }
+        requestWork();
+    }
+    sweep.schedule(SWEEP_MS);
+}
+function queueSong(index) {
+    if (index < 0 || index >= rows.length) return;
+    dirtyTiming[index] = true;
+    var start = index, end = index + 1;
+    while (start > 0 && !/^\*\s/.test(rows[start].name)) start--;
+    if (!/^\*\s/.test(rows[start].name) || /^\*\s*\[\[/.test(rows[start].name)) return;
+    while (end < rows.length && !/^\*\s/.test(rows[end].name)) end++;
+    for (var i = start; i < end; i++) dirtyTiming[i] = true;
 }
 function slotIndex(value) {
     value = Number(value);
-    return value >= 0 && value < rows.length && value === Math.floor(value) ? value : -1;
+    return value >= 0 && value < timingCount && value === Math.floor(value) ? value : -1;
 }
 function playbackChanged() {
-    if (!active || building) return;
+    if (!active || subscribing) return;
+    var track = null, clip = null, queued = null;
     try {
-        var track = timingPath ? new LiveAPI(timingPath) : null;
+        track = timingPath ? new LiveAPI(timingPath) : null;
         var p = track ? slotIndex(scalar(track, 'playing_slot_index')) : -1;
         var f = track ? slotIndex(scalar(track, 'fired_slot_index')) : -1;
-        release(track);
-        var clip = clipAt(p), queued = clipAt(f);
-        // Empty timing slots never acquire playing/queued outlines.
-        playing = clip ? p : -1;
-        fired = queued ? f : -1;
-        release(queued);
+        clip = clipAt(p); queued = clipAt(f);
+        playing = clip ? p : -1; fired = queued ? f : -1;
         outlet(0, 'play', playing, fired);
         var key = clip ? timingPath + ':' + p + ':' + clip.id : '';
         if (key !== positionKey) {
-            release(positionObserver); positionObserver = null;
-            positionKey = key;
-            if (clip) {
-                positionObserver = new LiveAPI(positionChanged, timingPath + ' clip_slots ' + p + ' clip');
-                positionObserver.property = 'playing_position';
-            }
+            release(positionObserver); positionObserver = null; positionKey = key;
+            if (clip) positionObserver = watch(timingPath + ' clip_slots ' + p + ' clip', 'playing_position', positionChanged, []);
         }
-        release(clip);
-        positionChanged();
+        queueSong(playing); queueSong(fired); requestWork(); positionChanged();
     } catch (e) { post('Setlist Touch playback: ' + e + '\n'); }
+    finally { release(track); release(clip); release(queued); }
 }
 function positionChanged() {
-    if (!active || building || playing < 0 || !positionObserver || !rows[playing]) return;
+    if (!active || subscribing || playing < 0 || !positionObserver || !rows[playing]) return;
     try {
         var beats = beatTiming(positionObserver);
         outlet(0, 'pos', playing, beats ? Number(scalar(positionObserver, 'playing_position')) : 0,
             beats ? Number(scalar(positionObserver, 'loop_start')) : 0,
-            beats ? Number(scalar(positionObserver, 'loop_end')) : 0,
-            rows[playing].beatsPerBar);
-    } catch (e) { schedule(); }
+            beats ? Number(scalar(positionObserver, 'loop_end')) : 0, rows[playing].beatsPerBar);
+    } catch (e) { dirtyTiming[playing] = true; requestWork(); }
 }
 function fire(index, expectedName) {
     if (!active || !root) return;
@@ -188,12 +250,11 @@ function fire(index, expectedName) {
     finally { release(scene); }
 }
 function notifydeleted() {
-    active = false;
-    if (debounce) debounce.cancel();
-    if (poll) poll.cancel();
-    releaseAll(rootObservers); releaseAll(sceneObservers); releaseAll(trackObservers);
+    active = false; generation++;
+    if (work) work.cancel(); if (sweep) sweep.cancel();
+    releaseAll(rootObservers); releaseAll(sceneObservers); releaseAll(trackObservers); releaseAll(retired);
     release(positionObserver); release(root);
-    root = null; positionObserver = null; sceneStructure = ''; trackStructure = ''; positionKey = '';
-    timingPath = null; rows = []; playing = -1; fired = -1;
-    rowsJSON = null;
+    root = null; positionObserver = null; positionKey = ''; timingPath = null; timingCount = 0;
+    rows = []; overrides = []; scan = null; playing = -1; fired = -1; rowsJSON = null;
+    dirtyScenes = {}; dirtyTiming = {}; sweepIndex = 0; playbackPending = false;
 }

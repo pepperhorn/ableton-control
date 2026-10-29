@@ -1,7 +1,7 @@
 const {test} = require('node:test');
 const a = require('node:assert/strict'), fs = require('fs'), vm = require('vm'), path = require('path');
 const device = path.join(__dirname,'../device');
-function harness({wrapped = false} = {}) {
+function harness({wrapped = false, size} = {}) {
   const fixture = JSON.parse(JSON.stringify(require('../device/lib/fixture-mix.json')));
   const data = {live_set:{tracks:fixture.tracks.flatMap(t=>['id',100+t.index]),return_tracks:fixture.returns.flatMap(r=>['id',200+r.index])}};
   for (const r of fixture.returns) data[`live_set return_tracks ${r.index}`]={...r,output_routing_type:JSON.stringify(wrapped ? {output_routing_type:{display_name:r.routedToMain?'Main':'Ext. Out'}} : {display_name:r.routedToMain?'Main':'Ext. Out'})};
@@ -10,46 +10,57 @@ function harness({wrapped = false} = {}) {
     t.sends.forEach((s,j)=>data[`live_set tracks ${t.index} mixer_device sends ${j}`]={...s});
   }
   data['live_set tracks 1'].name='+Kick';
+  if(size){
+    data.live_set.tracks=Array.from({length:size},(_,i)=>['id',100+i]).flat();
+    data.live_set.return_tracks=Array.from({length:6},(_,i)=>['id',200+i]).flat();
+    for(let j=0;j<6;j++)data['live_set return_tracks '+j]={name:'Return '+j,color:j,output_routing_type:JSON.stringify({display_name:'Ext. Out'})};
+    for(let i=0;i<size;i++){
+      data['live_set tracks '+i]={name:'+ Track '+i,color:i};
+      for(let j=0;j<6;j++)data['live_set tracks '+i+' mixer_device sends '+j]={value:0.5,label:'-6 dB'};
+    }
+  }
+  let operations=0;const ticks=[];
   const observers=[],apis=[],writeApis=[],failGets={},tasks=[],dict={},out=[],writes=[],logs=[];
   function LiveAPI(cb,p) {
-    apis.push(this);this.path=typeof cb==='string'?cb:p;this.id=1;this.callback=typeof cb==='function'?cb:null;
-    this.get=prop=>{const key=this.path+':'+prop;if(failGets[key]>0){failGets[key]--;throw Error('Transient read '+key);}if(!(prop in data[this.path]))throw Error(prop);return [data[this.path][prop]].flat();};
-    this.getcount=prop=>data[this.path][prop].length/2;
-    this.call=(method,value)=>{a.equal(method,'str_for_value');if(data[this.path].failLabel)throw Error('label');return [data[this.path].label];};
+    operations++;apis.push(this);this.path=typeof cb==='string'?cb:p;this._id=1;Object.defineProperty(this,'id',{get:()=>this._id,set:v=>{operations++;this._id=v;}});this.callback=typeof cb==='function'?cb:null;
+    this.get=prop=>{operations++;const key=this.path+':'+prop;if(failGets[key]>0){failGets[key]--;throw Error('Transient read '+key);}if(!(prop in data[this.path]))throw Error(prop);return [data[this.path][prop]].flat();};
+    this.getcount=prop=>{operations++;return data[this.path][prop].length/2;};
+    this.call=(method,value)=>{operations++;a.equal(method,'str_for_value');if(data[this.path].failLabel)throw Error('label');return [data[this.path].label];};
     this.set=(prop,v)=>{writeApis.push(this);data[this.path][prop]=v;writes.push([this.path,prop,v]);changed(this.path,prop);};
     if(this.callback)observers.push(this);
-    Object.defineProperty(this,'property',{get:()=>this._property,set:v=>{this._property=v;if(this.callback&&v)this.callback([v,...this.get(v)]);}});
+    Object.defineProperty(this,'property',{get:()=>this._property,set:v=>{operations++;this._property=v;if(this.callback&&v)this.callback([v,...this.get(v)]);}});
   }
   function Task(fn,context) {this.fn=fn.bind(context);this.schedule=ms=>{this.scheduled=true;this.ms=ms;};this.cancel=()=>this.scheduled=false;tasks.push(this);}
   function Dict(){this.set=(key,value)=>dict[key]=value;}
   const changed=(p,prop)=>{for(const o of observers.filter(o=>o.id&&o.path===p&&o.property===prop))o.callback([prop,...o.get(prop)]);};
-  const flush=()=>{for(let pass=0;pass<10;pass++){const pending=tasks.filter(t=>t.scheduled);if(!pending.length)return;for(const task of pending){task.scheduled=false;task.fn();}}throw Error('Task loop');};
+  const tick=(task=tasks.find(t=>t.scheduled))=>{if(!task)return false;task.scheduled=false;const before=operations;task.fn();ticks.push(operations-before);return true;};
+  const flush=()=>{for(let pass=0;pass<20000;pass++)if(!tick())return;throw Error('Task loop');};
   const ctx=vm.createContext({LiveAPI,Task,Dict,outlet:(...args)=>out.push(args),post:msg=>logs.push(msg)});
   vm.runInContext(fs.readFileSync(path.join(device,'mix.js'),'utf8'),ctx);
-  return {ctx,data,observers,apis,writeApis,failGets,tasks,dict,out,writes,logs,changed,flush};
+  return {ctx,data,observers,apis,writeApis,failGets,tasks,dict,out,writes,logs,changed,flush,tick,ticks,get operations(){return operations;}};
 }
 test('mix is lazy, selects literal prefix, reads labels and observes external sends only',()=>{
-  const h=harness();a.equal(h.observers.length,0);h.ctx.refresh();h.flush();
+  const h=harness();a.equal(h.observers.length,0);h.ctx.refresh();h.flush();h.flush();
   const raw=JSON.parse(h.dict.mix);a.equal(raw.tracks.length,9);a.equal(raw.returns.length,5);a.equal(raw.returns[0].routedToMain,true);
   a.equal(raw.tracks[0].sends[2].label,require('../device/lib/fixture-mix.json').tracks[0].sends[2].label);
   a.equal(h.observers.filter(o=>o.id&&o.property==='value').length,27);
-  a.equal(h.tasks.length,2);a.ok(h.tasks.every(t=>!t.repeating));a.deepEqual(h.logs,[]);
+  a.equal(h.tasks.length,3);a.ok(h.tasks.every(t=>!t.repeating));a.deepEqual(h.logs,[]);
 });
 test('routing handles Main/Master case-insensitively, invalid routing fails closed',()=>{
-  const h=harness();h.ctx.refresh();
+  const h=harness();h.ctx.refresh();h.flush();
   for(const name of ['Main','master','MAIN','Master']){h.data['live_set return_tracks 2'].output_routing_type=JSON.stringify({display_name:name});h.changed('live_set return_tracks 2','output_routing_type');h.flush();a.equal(JSON.parse(h.dict.mix).returns[2].routedToMain,true);}
   h.data['live_set return_tracks 2'].output_routing_type='bad';h.changed('live_set return_tracks 2','output_routing_type');h.flush();a.equal(JSON.parse(h.dict.mix).returns[2].routedToMain,null);
 });
 test('renames opt tracks in/out, rebuilds release observers and track/return changes rebind',()=>{
-  const h=harness();h.ctx.refresh();const count=h.observers.filter(o=>o.id).length;
+  const h=harness();h.ctx.refresh();h.flush();const count=h.observers.filter(o=>o.id).length;
   h.data['live_set tracks 1'].name='+ Kick';h.changed('live_set tracks 1','name');h.flush();a.equal(JSON.parse(h.dict.mix).tracks.length,10);
-  a.equal(h.observers.filter(o=>o.id).length,count+3);h.ctx.refresh();a.equal(h.observers.filter(o=>o.id).length,count+3);
+  a.equal(h.observers.filter(o=>o.id).length,count+3);h.ctx.refresh();h.flush();a.equal(h.observers.filter(o=>o.id).length,count+3);
   h.data.live_set.tracks=h.data.live_set.tracks.slice(0,-2);h.changed('live_set','tracks');h.flush();a.equal(JSON.parse(h.dict.mix).tracks.length,9);
   h.data.live_set.return_tracks=h.data.live_set.return_tracks.slice(0,-2);h.changed('live_set','return_tracks');h.flush();a.equal(JSON.parse(h.dict.mix).returns.length,4);
   h.ctx.notifydeleted();a.equal(h.observers.filter(o=>o.id).length,0);a.ok(h.tasks.every(t=>!t.scheduled));
 });
 test('level batches use Live text and set sends validates final names, structure and routing',()=>{
-  const h=harness();h.ctx.refresh();
+  const h=harness();h.ctx.refresh();h.flush();
   h.ctx.send(0,2,0.8,'+ DRUMS','Shaun');h.flush();a.equal(h.writes.length,1);a.ok(h.out.some(o=>o[1]==='level'&&o[4]===0.8));
   h.ctx.send(0,0,0.8);h.ctx.send(0,2,2);h.ctx.send(0.5,2,0.4);a.equal(h.writes.length,1);
   h.data['live_set tracks 0'].name='+ NEW';h.ctx.send(0,2,0.9,'+ DRUMS','Shaun');a.equal(h.writes.length,1);h.flush();
@@ -57,20 +68,20 @@ test('level batches use Live text and set sends validates final names, structure
   h.data.live_set.tracks.reverse();h.ctx.send(0,3,0.9,'+ NEW','Keith');a.equal(h.writes.length,1);
 });
 test('value changes are coalesced without snapshot rebuild; label failures use UI fallback',()=>{
-  const h=harness();h.ctx.refresh();h.out.length=0;
+  const h=harness();h.ctx.refresh();h.flush();h.out.length=0;
   const p='live_set tracks 0 mixer_device sends 2';h.data[p].value=0.5;h.changed(p,'value');h.data[p].value=0.7;h.changed(p,'value');
   h.data[p].failLabel=true;h.flush();a.deepEqual(h.out,[[0,'level',0,2,0.7,'']]);
 });
 test('device routes send through deferlow; refresh initializes both lanes',()=>{
   const p=JSON.parse(fs.readFileSync(path.join(device,'SetlistTouch.maxpat'))).patcher;
   const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));
-  a.equal(boxes.route.text,'route fire address url ready send');a.equal(boxes['send-defer'].text,'deferlow');
+  a.equal(boxes.route.text,'route fire address url ready send progress');a.equal(boxes['send-defer'].text,'deferlow');
   for(const [src,dst,outlet] of [['route','send-defer',4],['send-defer','send',0],['send','mix',0],['refresh','mix',0],['mix','node',0]])
     a.ok(p.lines.some(({patchline:l})=>l.source[0]===src&&l.source[1]===outlet&&l.destination[0]===dst));
 });
 
 test('deferred commands retain expected names even after a newer snapshot rebuild',()=>{
- const h=harness();h.ctx.refresh();h.data['live_set tracks 0'].name='+ NEW';h.changed('live_set tracks 0','name');h.flush();
+ const h=harness();h.ctx.refresh();h.flush();h.data['live_set tracks 0'].name='+ NEW';h.changed('live_set tracks 0','name');h.flush();
  h.ctx.send(0,2,0.8,'+ DRUMS','Shaun');a.equal(h.writes.length,0);
  h.ctx.send(0,2,0.8,'+ NEW','Shaun');a.equal(h.writes.length,1);
 });
@@ -86,7 +97,7 @@ test('Node for Max passes expected names intact and orders level events after th
 });
 
 test('routing unwraps Max LiveAPI JSON-string arrays, including final write validation',()=>{
- const h=harness({wrapped:true});h.ctx.refresh();
+ const h=harness({wrapped:true});h.ctx.refresh();h.flush();
  const api=h.observers.find(o=>o.path==='live_set return_tracks 2'&&o.property==='name');
  a.deepEqual(api.get('output_routing_type'),[JSON.stringify({output_routing_type:{display_name:'Ext. Out'}})]);
  let raw=JSON.parse(h.dict.mix);a.equal(raw.returns[0].routedToMain,true);a.equal(raw.returns[2].routedToMain,false);
@@ -101,33 +112,52 @@ test('routing unwraps Max LiveAPI JSON-string arrays, including final write vali
  ]){h.data['live_set return_tracks 2'].output_routing_type=JSON.stringify(routing);h.changed('live_set return_tracks 2','output_routing_type');h.flush();raw=JSON.parse(h.dict.mix);a.equal(raw.returns[2].routedToMain,expected);}
 });
 test('failed rebuild retries with capped backoff, recovers without an edit and releases partial bindings',()=>{
- const h=harness();h.failGets['live_set tracks 0:color']=20;h.ctx.refresh();
+ const h=harness();h.failGets['live_set tracks 0:color']=20;h.ctx.refresh();while(h.tasks[2].scheduled)h.tick(h.tasks[2]);
  const retry=h.tasks[0];
  for(const delay of [1000,2000,4000,8000,8000]){
   a.deepEqual(JSON.parse(h.dict.mix),{returns:[],tracks:[]});
   a.equal(retry.scheduled,true);a.equal(retry.ms,delay);
   a.equal(h.apis.filter(api=>api.id).length,3,'only the root and its two observers survive a failed bind');
   // Root itself is also retained until deletion.
-  retry.scheduled=false;retry.fn();
+  retry.scheduled=false;retry.fn();while(h.tasks[2].scheduled)h.tick(h.tasks[2]);
  }
- h.failGets['live_set tracks 0:color']=0;retry.scheduled=false;retry.fn();
+ h.failGets['live_set tracks 0:color']=0;retry.scheduled=false;retry.fn();while(h.tasks[2].scheduled)h.tick(h.tasks[2]);
  a.equal(JSON.parse(h.dict.mix).tracks.length,9);a.equal(retry.scheduled,false);
- h.failGets['live_set tracks 0:color']=1;h.ctx.rebuild();a.equal(retry.ms,1000,'successful recovery resets backoff');
+ h.failGets['live_set tracks 0:color']=1;h.ctx.rebuild();while(h.tasks[2].scheduled)h.tick(h.tasks[2]);a.equal(retry.ms,1000,'successful recovery resets backoff');
  h.ctx.notifydeleted();a.equal(h.apis.filter(api=>api.id).length,0);a.ok(h.tasks.every(t=>!t.scheduled));
 });
 test('send reuses observed track/return/parameter objects and releases them on rebind and delete',()=>{
- const h=harness();h.ctx.refresh();const created=h.apis.length;
+ const h=harness();h.ctx.refresh();h.flush();const created=h.apis.length;
  const sendApi=h.observers.find(o=>o.path==='live_set tracks 0 mixer_device sends 2'&&o.property==='value');
  for(let i=0;i<20;i++)h.ctx.send(0,2,i/20,'+ DRUMS','Shaun');
  a.equal(h.apis.length,created);a.equal(h.writes.length,20);a.ok(h.writeApis.every(api=>api===sendApi));
- const oldApis=h.apis.slice();h.ctx.rebuild();a.equal(sendApi.id,0);a.ok(oldApis.filter(api=>api.path!=='live_set').every(api=>api.id===0));
+ const oldApis=h.apis.slice();h.ctx.rebuild();h.flush();a.equal(sendApi.id,0);a.ok(oldApis.filter(api=>api.path!=='live_set').every(api=>api.id===0));
  h.ctx.notifydeleted();a.ok(h.apis.every(api=>api.id===0));
 });
 
 test('failed observer subscription is released before retrying the snapshot',()=>{
- const h=harness();h.failGets['live_set tracks 0:name']=1;h.ctx.refresh();
+ const h=harness();h.failGets['live_set tracks 0:name']=1;h.ctx.refresh();while(h.tasks[2].scheduled)h.tick(h.tasks[2]);
  a.deepEqual(JSON.parse(h.dict.mix),{returns:[],tracks:[]});
  a.equal(h.apis.filter(api=>api.id).length,3);a.equal(h.tasks[0].ms,1000);
  h.flush();a.equal(JSON.parse(h.dict.mix).tracks.length,9);
  h.ctx.notifydeleted();a.ok(h.apis.every(api=>api.id===0));
+});
+
+test('100 tracks and six returns index in bounded slices and cancel cleanly',()=>{
+ const h=harness({size:100});h.ctx.refresh();const startup=h.operations;a.equal(h.dict.mix,undefined);h.flush();
+ a.equal(JSON.parse(h.dict.mix).tracks.length,100);a.equal(JSON.parse(h.dict.mix).returns.length,6);
+ a.ok(h.ticks.every(n=>n<=150),Math.max(...h.ticks));a.ok(startup<=150);
+ console.log('MIX budget',JSON.stringify({tracks:100,returns:6,startup,worst:Math.max(...h.ticks),ticks:h.ticks.length,estimatedMs:h.ticks.length*h.ctx.MIX_SLICE_MS}));
+ h.ticks.length=0;h.ctx.rebuild();h.flush();a.ok(h.ticks.every(n=>n<=150));
+ h.ctx.rebuild();h.tick();h.ctx.notifydeleted();a.ok(h.apis.every(api=>api.id===0));a.ok(h.tasks.every(t=>!t.scheduled));
+ h.ctx.refresh();h.flush();a.equal(JSON.parse(h.dict.mix).tracks.length,100);
+});
+
+test('send echoes received between index slices are retained after completion',()=>{
+ const h=harness();h.ctx.refresh();
+ const target='live_set tracks 0 mixer_device sends 2';
+ while(!h.observers.some(o=>o.id&&o.path===target))h.tick();
+ h.data[target].value=0.83;h.changed(target,'value');h.flush();
+ a.ok(h.out.some(o=>o[1]==='level'&&o[2]===0&&o[3]===2&&o[4]===0.83));
+ a.equal(h.ctx.snapshot.tracks[0].sends[2].value,0.83);
 });

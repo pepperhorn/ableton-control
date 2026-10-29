@@ -10,6 +10,13 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
   let cfg = {...config}, parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
+  let indexing = null;
+  function onProgress(value) {
+    if (!value || !Number.isInteger(value.done) || !Number.isInteger(value.total) ||
+        value.done < 0 || value.total < 0 || value.done > value.total) return;
+    indexing = {done:value.done, total:value.total}; broadcast('progress', indexing);
+  }
+  bridge.on('progress', onProgress);
   let setJSON = null, mix = parseMix(), mixJSON = null;
   let transport = null, transportTimer = null, lastTransport = 0;
   function onTransport(raw) {
@@ -125,6 +132,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         send(res, 'mix', mix);
         send(res, 'play', play); if (pos) send(res, 'pos', pos);
         if (transport) send(res, 'transport', transport);
+        if (indexing) send(res, 'progress', indexing);
         res.on('close', () => clients.delete(res)); return;
       }
       if (route === '/api/transport' && req.method === 'POST') {
@@ -202,6 +210,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     async close() {
       if (closed) return; closed = true; clearInterval(ping); clearTimeout(posTimer); clearTimeout(transportTimer);
       bridge.removeListener('transport', onTransport);
+      bridge.removeListener('progress', onProgress);
       bridge.removeListener('mix', onMix); bridge.removeListener('level', onLevel);
       for (const entry of [...sends.values(), ...levelUpdates.values()]) clearTimeout(entry.timer);
       bridge.removeListener('scenes', onScenes); bridge.removeListener('play', onPlay); bridge.removeListener('pos', onPos);

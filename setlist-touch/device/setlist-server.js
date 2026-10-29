@@ -17,6 +17,17 @@ max.addHandler('transport', (is_playing, record_mode, tempo, current_song_time, 
 });
 bridge.fire = (index, name) => max.outlet('fire', index, name);
 let sceneRead = Promise.resolve();
+let lastAddress = '', indexing = false;
+max.addHandler('progress', (done, total) => {
+  if (!Number.isInteger(done) || !Number.isInteger(total) || done < 0 || total < done) return;
+  // Completion follows the final Dict read, so clients keep the status until the set arrives.
+  sceneRead.then(() => {
+    indexing = done < total;
+    bridge.emit('progress', {done, total});
+    if (indexing) max.outlet('progress', done, total);
+    else if (lastAddress) max.outlet('address', lastAddress);
+  });
+});
 max.addHandler('scenes', () => {
   sceneRead = sceneRead.then(async () => {
     const dict = await max.getDict('setlist_touch_scenes');
@@ -43,7 +54,8 @@ max.addHandler('level', (trackIndex, returnIndex, value, ...label) => {
 function address(port) {
   const interfaces = Object.values(os.networkInterfaces()).flat();
   const ip = interfaces.find(i => (i.family === 'IPv4' || i.family === 4) && !i.internal);
-  max.outlet('address', `http://${ip ? ip.address : 'localhost'}:${port}`);
+  lastAddress = `http://${ip ? ip.address : 'localhost'}:${port}`;
+  if (!indexing) max.outlet('address', lastAddress);
   max.outlet('url', `http://localhost:${port}/`);
 }
 bridge.addressChanged = address;

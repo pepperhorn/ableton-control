@@ -7,7 +7,13 @@
 <link class="setlist-styles" rel="stylesheet" href="/style.css">
 </head>
 <body class="setlist-body">
-<div class="connection-bar" role="status">Reconnecting…</div>
+<div class="connection-bar" role="status">
+<span class="connection-label">Reconnecting…</span>
+<div class="index-progress" hidden>
+<span class="index-progress-label">Indexing Live set…</span>
+<div class="index-progress-track" role="progressbar" aria-label="Live set indexing" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="index-progress-bar"></div></div>
+</div>
+</div>
 <header class="setlist-header">
 <nav class="page-switch" aria-label="Page"><button class="page-choice" data-page="scenes" type="button" aria-pressed="true">Scenes</button><button class="page-choice" data-page="mix" type="button" aria-pressed="false">My mix</button></nav>
 <button class="sidebar-toggle" type="button" aria-controls="setlist-sidebar">☰ Setlist</button>

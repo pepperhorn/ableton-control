@@ -80,3 +80,17 @@ Official API references used for the implementation: [Scene](https://docs.cyclin
 Neither automated tests nor the browser fixture establish real Ableton behaviour, Windows jweb touch, firewall reachability, phone authentication or performance with the complete Live set. Run both user checklists in the implementation report before gig use. At the end of implementation, the original Task 4 placeholder has been replaced by the completed UI.
 
 Optional browser integration checks live in `scripts/browser-check.cjs`. Install Playwright **outside the device/repository runtime** and set `PLAYWRIGHT_MODULE` to its module path; set `CHROMIUM_PATH` if using an existing Chromium binary, and optionally `ARTIFACT_DIR` for screenshots. The script starts its own fixture server on `0.0.0.0` and checks desktop fit, moving progress, browsing/filtering, clean tap versus drag/multitouch/lock, 409 feedback, set-edit reconciliation, settings, touch diagnostics, phone width, and reconnect after a server restart. It does not drive Ableton.
+
+## Large sets
+
+Scene indexing runs in slices of three scenes, 15 ms apart. The device shows
+`Indexing scenes n / total…` and the web app shows `Indexing Live set… n / total`
+with a progress bar. The first set appears only when complete; a structure change
+keeps the previous set available while its replacement indexes. Scene edits update
+only the affected rows. Timing reads follow playing/queued songs, with a background
+sweep of three timing slots per second for edits elsewhere (about 228 seconds for
+683 scenes). Mix indexing is sliced too. Actual indexing time and audio continuity
+still need checking in Live on the show computer.
+
+For a slow-index fixture preview:
+`SETLIST_TOUCH_PORT=5250 SETLIST_TOUCH_SLOW_INDEX=1 node device/dev.js`.
