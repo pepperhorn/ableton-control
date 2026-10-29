@@ -109,3 +109,10 @@ test('Live musical position overrides the single-signature calculation; call fai
   h.data.beats_song_time = 'invalid'; h.changed('current_song_time'); h.advance(100);
   a.equal(parse(h.out[2]).position, '2.2');
 });
+
+
+test('ready reuses in-flight and completed transport observations without rebinding',()=>{
+ const h=harness();h.ctx.ready();const count=h.apis.length,tasks=h.tasks.length;
+ h.ctx.ready();a.equal(h.apis.length,count);a.equal(h.tasks.length,tasks);h.advance(0);a.equal(h.out.length,1);
+ h.ctx.ready();a.equal(h.out.length,2);a.equal(h.apis.length,count);a.equal(h.tasks.length,tasks);
+});

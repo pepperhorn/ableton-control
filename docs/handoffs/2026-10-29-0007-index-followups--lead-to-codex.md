@@ -92,6 +92,9 @@ None.
 
 ---
 ## Receiver ack
+I will address all six PR #4 follow-ups only in the owned scripts, generator/artifacts, tests and 0007 handoffs. I will preserve complete scene snapshots, final-boundary launch/send checks, ES5 and the ≤150 operations / ≤3 scene reads per tick limits; measure mix rescan write availability; avoid duplicate ready scans; keep scenes intact on tracks-only changes; bound deletion and back off persistent errors. I will commit the return handoff, push only `orch/0007-index-followups`, open the requested draft PR and leave review/merge to the lead. No blocking questions.
+
+Worktree: `/home/shaun/.t3/worktrees/m4l-control/t3-63b03fd2`; starting HEAD `ea87cb66c3c30ce74ebad313b610f2e5f547fc8c` includes the pinned base. GBrain search `m4l-control` returned only unrelated weak semantic matches; no project page was used and no implementer write-back will be made.
 
 ---
 ## Return (implementer → lead; fill in when done, or in a separate …-to-lead.md)
