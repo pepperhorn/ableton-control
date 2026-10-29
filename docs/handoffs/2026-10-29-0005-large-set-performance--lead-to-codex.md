@@ -7,7 +7,7 @@
 - **PR:** (opened by implementer)
 - **Base commit:** cbde2eed84a8a4d2cf6b2d377b400fb585ec49ab
 - **Port (if running a server):** 5250 (`SETLIST_TOUCH_PORT=5250 node device/dev.js`)
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 On the user's real set (683 scenes), dropping in `SetlistTouch.amxd` froze Live. Make indexing chunked, incremental and non-blocking, and show indexing progress both in the device and in the web app. Done means the spec's acceptance criteria are met, `npm test` passes and a draft PR is open.

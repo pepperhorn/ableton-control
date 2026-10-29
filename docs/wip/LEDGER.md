@@ -3,16 +3,17 @@
 > Single writer: the **lead**, on the main branch only. Implementers report status through their return handoff.
 > Status: proposed · specced · planned · dispatched · in-review · changes-requested · ready · merged · closed · blocked · parked
 
-Next ID: 0007
+Next ID: 0008
 
 ## Active
 
 | K | Title | Status | Owner (provider/model) | Branch | PR | Worktree | T3 task/thread | Spec | Plan | Latest handoff | Updated |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| 0005 | Large-set performance + indexing progress | https://github.com/pepperhorn/ableton-control/pull/4 | 2026-10-29 (d57b0a7, squash of reviewed 3cf9f49) | Opus approved r1. Non-blocking follow-ups → 0007. Verify in Live: 683-scene index time, no dropouts, status text quotes, rename ~0.5 s. |
 | 0003 | Transport header | https://github.com/pepperhorn/ableton-control/pull/3 | 2026-10-29 (squash of reviewed bfd084a) | Opus approved r2. Optional: extra lost-pointer safeguard (transport-render.js:66). Verify in Live: get_current_beats_song_time format, play/stop idempotence, Arrangement Record toggle. |
 | 0002 | In-ear mix pages (phase 2) | https://github.com/pepperhorn/ableton-control/pull/2 | 2026-10-29 (22b634a, squash of reviewed cd24b83) | Opus approved r2. Optional nits: late mid-drag echo or cancel() clears release hold early. Needs user verification in Live 12/Windows: routing JSON and Main/Master name, echo latency vs 1 s hold, send labels, touch. |
 | 0001 | Setlist Touch (phase 1) | https://github.com/pepperhorn/ableton-control/pull/1 | 2026-10-29 (e2bc976, squash of reviewed a3f2853) | Opus approved r2. Minor follow-ups folded into 0002: Space blocked in settings inputs; extra LiveAPI reads per position update; empty set shows Reconnecting. Needs user verification in Live on Windows (touch in jweb, END-row empty name, window open/resize). |
-| 0005 | Large-set performance + indexing progress (683-scene set froze Live) | in-review | codex/gpt-6.1-sol | orch/0005-large-set-performance | https://github.com/pepperhorn/ableton-control/pull/4 (head 3cf9f49) | /home/shaun/.t3/worktrees/m4l-control/t3-b74d6a78 | thread:delegated-task:command%3Amcp%3Ad1f7e92e-99ac-49f8-98ee-7e0e88d7ddd6%3Adelegate-task%3A0005-impl-r1 | docs/specs/0005-large-set-performance.md | in handoff | docs/handoffs/2026-10-29-0005-large-set-performance--lead-to-codex.md | 2026-10-29 |
+| 0007 | 0005 review follow-ups: mix rebind blocks fader sends 1–3 s (batch untagged tracks); sprintf symout quotes in status; startup indexes twice (thisdevice + Node ready); any track add/move re-indexes all scenes; no back-off on repeated index errors; notifydeleted bulk release | proposed (after user tests 0005) | — | — | — | — | — | — | — | — | 2026-10-29 |
 | 0006 | "Build timing clips" button: fill empty slots on the device's own track with empty MIDI clips sized from [N32]-style tags or a chosen reference track; one undo step; skips existing clips (delete a clip + rerun = regen); device track becomes the timing track | proposed (after 0005) | — | — | — | — | — | — | — | — | 2026-10-29 |
 | 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
 
@@ -23,6 +24,8 @@ Next ID: 0007
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-10-29 0007 →proposed — Opus r1 non-blocking findings on PR #4
+2026-10-29 0005 in-review→merged — PR #4 squash d57b0a7; 117 tests on main; GBrain: pending write-back
 2026-10-29 0005 dispatched→in-review — PR #4 head 3cf9f49, 117 tests; Opus review r1
 2026-10-29 0006 →proposed — user idea: generate timing clips; regen by deleting a clip and rerunning; explicit action, not during indexing, no auto-refill observers
 2026-10-29 0005 →dispatched — user test: 683-scene set froze Live on load (sync scan + 5 s full poll); add chunked indexing + progress feedback; Sol in worktree
