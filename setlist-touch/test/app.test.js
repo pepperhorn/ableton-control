@@ -137,3 +137,33 @@ test('transport requires auth and rejects cross-origin and rebound-host mutation
  const local=await setup(t);a.equal((await req(local.port,'/api/transport',body,{Host:'attacker.example'})).status,401);
  const empty=await setup(t,'100.64.0.9',true,'');a.equal((await req(empty.port,'/api/transport',body)).status,403);
 });
+
+test('index progress streams to existing clients and reconnect snapshots until completion',async t=>{
+ const {port,bridge}=await setup(t,undefined,false),s=stream(port);t.after(()=>s.request.destroy());await s.ready;
+ bridge.emit('progress',{done:0,total:1000});bridge.emit('progress',{done:340,total:1000});await req(port,'/');
+ const values=s.events.filter(e=>e.startsWith('event: progress')).map(e=>JSON.parse(e.split('data: ')[1]));
+ a.deepEqual(values,[{done:0,total:1000},{done:340,total:1000}]);
+ const later=stream(port);t.after(()=>later.request.destroy());await later.ready;await req(port,'/');
+ a.deepEqual(JSON.parse(later.events.find(e=>e.startsWith('event: progress')).split('data: ')[1]),{done:340,total:1000});
+ a.equal(later.events.some(e=>e.startsWith('event: set')),false);
+ bridge.emit('scenes',fixture);bridge.emit('progress',{done:1000,total:1000});await req(port,'/');
+ a.ok(later.events.findIndex(e=>e.startsWith('event: set'))<later.events.findIndex(e=>e.startsWith('event: progress')&&e.includes('"done":1000')));
+ const count=s.events.length;
+ for(const value of [null,{}, {done:-1,total:1000},{done:1001,total:1000},{done:1.5,total:10}])bridge.emit('progress',value);
+ await req(port,'/');a.equal(s.events.length,count);
+ const complete=stream(port);t.after(()=>complete.request.destroy());await complete.ready;await req(port,'/');
+ a.deepEqual(JSON.parse(complete.events.find(e=>e.startsWith('event: progress')).split('data: ')[1]),{done:1000,total:1000});
+ s.request.destroy();later.request.destroy();complete.request.destroy();
+});
+
+test('slow fake index publishes progress before a single complete scene snapshot',()=>{
+ const intervals=[],cleared=[];
+ const source=require('fs').readFileSync(path.join(__dirname,'../device/lib/fake-bridge.js'),'utf8');
+ const module={exports:{}};
+ require('vm').runInNewContext(source,{module,require,setInterval:fn=>{intervals.push(fn);return intervals.length;},clearInterval:id=>cleared.push(id),setTimeout,clearTimeout});
+ const bridge=module.exports.createFakeBridge(fixture,undefined,{slowIndex:true}),events=[];
+ bridge.on('scenes',rows=>events.push(['scenes',rows.length]));bridge.on('progress',p=>events.push(['progress',p.done,p.total]));
+ bridge.snapshot();a.deepEqual(events,[['progress',0,fixture.length]]);
+ for(let n=0;n<fixture.length;n++)intervals[0]();
+ a.deepEqual(events.at(-2),['scenes',fixture.length]);a.deepEqual(events.at(-1),['progress',fixture.length,fixture.length]);a.deepEqual(cleared,[1]);
+});

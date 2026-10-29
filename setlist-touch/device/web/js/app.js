@@ -10,7 +10,7 @@ let prefs = {}; try { prefs = JSON.parse(localStorage.getItem('setlist-touch') |
 let state = initialState(prefs), set = {songs:[],categories:[],sceneToSong:{}}, play = {playing:-1,fired:-1,playingSongId:null}, pos = null;
 let snapshot = false, initialPlay = false, transport = false, mixSnapshot = false;
 let mix = {returns:[],strips:[]}, mixState = initialMixState(prefs), mixJSON = null;
-let setJSON = null;
+let setJSON = null, indexProgress = null;
 const detector = createTapDetector(), pointers = new Set();
 const mixUI = createMixRenderer({
   stateOf:() => ({...state,connected:transport && mixSnapshot}), mixOf:() => mix, viewOf:() => mixState,
@@ -28,8 +28,18 @@ function shell() {
   $('.mix-panel').hidden = settingsOpen || mixState.page !== 'mix';
   for (const button of document.querySelectorAll('.page-choice')) button.setAttribute('aria-pressed',String(button.dataset.page === mixState.page));
   const ready = mixState.page === 'mix' ? mixSnapshot && mix.returns.length > 0 : snapshot;
-  $('.connection-bar').hidden = transport && ready;
-  $('.connection-bar').textContent = transport ? 'Waiting for Live set…' : 'Reconnecting…';
+  const indexing = transport && indexProgress && indexProgress.done < indexProgress.total;
+  $('.connection-bar').hidden = transport && ready && !indexing;
+  $('.connection-label').hidden = !!indexing;
+  $('.connection-label').textContent = transport ? 'Waiting for Live set…' : 'Reconnecting…';
+  $('.index-progress').hidden = !indexing;
+  if (indexing) {
+    $('.index-progress-label').textContent = `Indexing Live set… ${indexProgress.done} / ${indexProgress.total}`;
+    const percent = Math.round(indexProgress.done / indexProgress.total * 100);
+    $('.index-progress-bar').style.width = percent + '%';
+    $('.index-progress-track').setAttribute('aria-valuenow', String(percent));
+    $('.index-progress-track').setAttribute('aria-valuetext', `${indexProgress.done} of ${indexProgress.total} scenes`);
+  }
   mixUI.syncAvailability(); transportUI.syncAvailability();
 }
 function dispatchMix(action) {
@@ -99,6 +109,7 @@ events.addEventListener('level',e=>{
   if(!strip || !strip.levels[level.returnIndex])return;
   strip.levels[level.returnIndex]={value:level.value,label:level.label};mixJSON=JSON.stringify(mix);mixUI.updateLevels(level);
 });
+events.addEventListener('progress',e=>{indexProgress=JSON.parse(e.data);shell();});
 events.addEventListener('set',e=>{
   const next=JSON.parse(e.data);
   // Keep the last song visible, but never enable launching from an empty set.

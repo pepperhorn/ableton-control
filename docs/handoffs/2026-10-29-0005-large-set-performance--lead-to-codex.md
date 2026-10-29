@@ -94,5 +94,7 @@ None.
 ---
 ## Receiver ack
 
+2026-10-29 — Codex: I will implement bounded Task-driven scene indexing and observer setup, incremental scene/timing updates, and indexing progress through Max, Node/SSE and the web UI. I will measure mix startup and chunk it if required, preserve launch validation and the previous complete snapshot during re-indexing, stay within the listed owned files, run the specified unit/build/browser checks, and push only orch/0005-large-set-performance with a draft PR and committed return handoff. No open questions. GBrain search for m4l-control returned no relevant project pages. Live/audio/Windows acceptance remains with the user.
+
 ---
 ## Return (implementer → lead; fill in when done, or in a separate …-to-lead.md)

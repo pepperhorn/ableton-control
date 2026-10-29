@@ -3,7 +3,7 @@ const {createApp} = require('./lib/app');
 const {createFakeBridge} = require('./lib/fake-bridge');
 const {loadConfig} = require('./lib/config');
 const fixture = require('./lib/fixture-rise.json');
-const bridge = createFakeBridge(fixture, require('./lib/fixture-mix.json')), config = loadConfig();
+const bridge = createFakeBridge(fixture, require('./lib/fixture-mix.json'), {slowIndex:process.env.SETLIST_TOUCH_SLOW_INDEX === '1'}), config = loadConfig();
 if (process.env.SETLIST_TOUCH_PORT) config.port = Number(process.env.SETLIST_TOUCH_PORT);
 const app = createApp({bridge, config});
 bridge.on('setSend', value => console.log('setSend', JSON.stringify(value)));

@@ -39,7 +39,7 @@
       220,
       22
      ],
-     "text": "route fire address url ready send"
+     "text": "route fire address url ready send progress"
     }
    },
    {
@@ -209,6 +209,19 @@
       22
      ],
      "text": "prepend set"
+    }
+   },
+   {
+    "box": {
+     "id": "index-status",
+     "maxclass": "newobj",
+     "patching_rect": [
+      260,
+      200,
+      220,
+      22
+     ],
+     "text": "sprintf symout Indexing scenes %ld / %ld…"
     }
    },
    {
@@ -740,6 +753,30 @@
      "source": [
       "route",
       5
+     ],
+     "destination": [
+      "index-status",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "index-status",
+      0
+     ],
+     "destination": [
+      "address-set",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "route",
+      6
      ],
      "destination": [
       "transport-route",
