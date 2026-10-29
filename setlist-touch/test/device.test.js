@@ -66,7 +66,7 @@ test('Node for Max passes transport selector/target and forwards observed state'
 test('progress routes to device status and completion restores the latest address after the scenes Dict',async()=>{
  const p=JSON.parse(fs.readFileSync(path.join(device,'SetlistTouch.maxpat'))).patcher;
  const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));
- a.equal(boxes['index-status'].text,'sprintf symout Indexing scenes %ld / %ld…');
+ a.equal(boxes['index-status'].text,'sprintf Indexing scenes %ld / %ld…');
  for(const [src,dst,outlet] of [['route','index-status',5],['index-status','address-set',0],['address-set','address',0]])
   a.ok(p.lines.some(({patchline:l})=>l.source[0]===src&&l.source[1]===outlet&&l.destination[0]===dst));
  const outlets=[],handlers=[],events=[];let bridge,resolveDict;
@@ -83,4 +83,15 @@ test('progress routes to device status and completion restores the latest addres
  a.equal(events.length,1);resolveDict({scenes:'[]'});await new Promise(r=>setImmediate(r));
  a.deepEqual(events,[['progress',340],['scenes'],['progress',683]]);
  a.ok(outlets.at(-1)[1].endsWith(':5250'));a.equal(outlets.at(-1)[0],'address');
+});
+
+
+test('Node ready uses distinct replay messages for all three lanes without triggering refresh',()=>{
+ const p=JSON.parse(fs.readFileSync(path.join(device,'SetlistTouch.maxpat'))).patcher;
+ const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));
+ a.equal(boxes.ready.text,'ready');
+ a.ok(p.lines.some(({patchline:l})=>l.source[0]==='route'&&l.source[1]===3&&l.destination[0]==='ready'));
+ a.ok(!p.lines.some(({patchline:l})=>l.source[0]==='route'&&l.source[1]===3&&l.destination[0]==='refresh'));
+ for(const lane of ['lom','mix','transport'])a.ok(p.lines.some(({patchline:l})=>l.source[0]==='ready'&&l.destination[0]===lane));
+ a.ok(p.lines.some(({patchline:l})=>l.source[0]==='thisdevice'&&l.destination[0]==='refresh'));
 });

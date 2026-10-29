@@ -34,6 +34,10 @@ function flush() {
         outlet(0, 'transport', values[0], values[1], values[2], values[3], values[4], values[5], beats);
     } catch (e) { retry.schedule(1000); }
 }
+function ready() {
+    if (!active) refresh();
+    else if (!pending) flush();
+}
 function refresh() {
     notifydeleted(); active = true; building = true; last = 0;
     task = new Task(flush, this); retry = new Task(refresh, this);

@@ -3,13 +3,14 @@ autowatch = 1;
 inlets = 1;
 outlets = 1;
 var CHUNK = 3, SLICE_MS = 15, PROGRESS_MS = 120, SWEEP_MS = 1000;
-var root = null, scenesDict = null, work = null, sweep = null;
+var root = null, scenesDict = null, work = null, sweep = null, retry = null;
 var rootObservers = [], sceneObservers = [], trackObservers = [], retired = [];
 var positionObserver = null, timingPath = null, timingCount = 0;
 var rows = [], overrides = [], playing = -1, fired = -1;
 var positionKey = '', rowsJSON = null, active = false, subscribing = false;
 var scan = null, generation = 0, dirtyScenes = {}, dirtyTiming = {}, sweepIndex = 0;
-var playbackPending = false;
+var playbackPending = false, sceneIds = '', priorityTiming = {};
+var retryDelay = 1000, retryPending = false, lastProgress = null;
 var songBeats = 4, signatureDirty = false, progressElapsed = 0;
 
 function scalar(api, property) {
@@ -41,7 +42,7 @@ function watch(path, property, callback, list) {
     } finally { subscribing = previous; }
 }
 function requestWork(delay) {
-    if (active) { work.cancel(); work.schedule(delay || SLICE_MS); }
+    if (active && !retryPending) { work.cancel(); work.schedule(delay || SLICE_MS); }
 }
 function readSignature() {
     var n = Number(scalar(root, 'signature_numerator'));
@@ -65,18 +66,27 @@ function observeScene(index) {
     watch(path, 'time_signature_numerator', callback, sceneObservers);
     watch(path, 'time_signature_denominator', callback, sceneObservers);
 }
+function progress(done, total) {
+    lastProgress = [done, total]; outlet(0, 'progress', done, total);
+}
+function ready() {
+    if (!active) { refresh(); return; }
+    if (rowsJSON !== null) outlet(0, 'scenes');
+    if (lastProgress) outlet(0, 'progress', lastProgress[0], lastProgress[1]);
+    playbackChanged();
+}
 function refresh() {
-    // Refresh may arrive after Node starts while another scan is running.
+    // Explicit refresh restarts indexing; Node ready only replays cached state.
     // Cancel immediately, but drain the many scene observers in bounded work ticks.
-    if (work) work.cancel(); if (sweep) sweep.cancel();
+    if (work) work.cancel(); if (sweep) sweep.cancel(); if (retry) retry.cancel();
     retired = retired.concat(sceneObservers); sceneObservers = [];
     releaseAll(rootObservers); releaseAll(trackObservers); release(positionObserver); release(root);
     positionObserver = null; positionKey = ''; timingPath = null; rowsJSON = null;
-    active = true;
+    active = true; retryPending = false; retryDelay = 1000; lastProgress = null;
     root = new LiveAPI('live_set'); scenesDict = new Dict('setlist_touch_scenes');
-    work = new Task(workTick, this); sweep = new Task(sweepTick, this);
+    work = new Task(workTick, this); sweep = new Task(sweepTick, this); retry = new Task(retryRebuild, this);
     watch('live_set', 'scenes', rebuild, rootObservers);
-    watch('live_set', 'tracks', rebuild, rootObservers);
+    watch('live_set', 'tracks', tracksChanged, rootObservers);
     watch('live_set', 'signature_numerator', signatureChanged, rootObservers);
     watch('live_set', 'signature_denominator', signatureChanged, rootObservers);
     rebuild(); sweep.schedule(SWEEP_MS);
@@ -122,23 +132,43 @@ function rebuild() {
     // Retire old generations in bounded batches; their callbacks are inert immediately.
     generation++; work.cancel();
     retired = retired.concat(sceneObservers); sceneObservers = [];
-    dirtyScenes = {}; dirtyTiming = {}; signatureDirty = false;
-    timingCount = root.getcount('scenes');
-    var count = root.getcount('tracks'), path = count ? 'live_set tracks ' + (count - 1) : null;
-    readSignature();
+    dirtyScenes = {}; dirtyTiming = {}; priorityTiming = {}; signatureDirty = false;
+    sceneIds = String(root.get('scenes')); timingCount = root.getcount('scenes');
+    readSignature(); bindTiming();
+    scan = {index:0, total:timingCount, rows:[], overrides:[]};
+    progressElapsed = 0; progress(0, timingCount);
+    requestWork(); playbackChanged();
+}
+function bindTiming() {
+    var count = root.getcount('tracks');
     releaseAll(trackObservers); release(positionObserver); positionObserver = null; positionKey = '';
-    timingPath = path;
+    timingPath = count ? 'live_set tracks ' + (count - 1) : null;
     if (timingPath) {
         watch(timingPath, 'playing_slot_index', playbackChanged, trackObservers);
         watch(timingPath, 'fired_slot_index', playbackChanged, trackObservers);
     }
-    scan = {index:0, total:timingCount, rows:[], overrides:[]};
-    progressElapsed = 0; outlet(0, 'progress', 0, timingCount);
-    requestWork(); playbackChanged();
+}
+function tracksChanged() {
+    if (!active || subscribing || retryPending) return;
+    if (String(root.get('scenes')) !== sceneIds) { rebuild(); return; }
+    bindTiming();
+    var target = scan ? scan.rows : rows;
+    for (var i = 0; i < target.length; i++) dirtyTiming[i] = true;
+    playbackChanged(); requestWork();
+}
+function retryRebuild() {
+    if (!active) return;
+    retryPending = false;
+    try { rebuild(); } catch (e) { workFailed(e); }
+}
+function workFailed(error) {
+    work.cancel(); retryPending = true;
+    post('Setlist Touch refresh (retry in ' + retryDelay + ' ms): ' + error + '\n');
+    retry.cancel(); retry.schedule(retryDelay); retryDelay = Math.min(8000, retryDelay * 2);
 }
 function hasEntries(map) { for (var key in map) if (map.hasOwnProperty(key)) return true; return false; }
 function workTick() {
-    if (!active) return;
+    if (!active || retryPending) return;
     try {
         // At most 30 releases (60 property/id writes), with no scene reads this tick.
         if (retired.length) {
@@ -154,13 +184,18 @@ function workTick() {
             }
             progressElapsed += SLICE_MS;
             if (scan.index < scan.total && progressElapsed >= PROGRESS_MS) {
-                outlet(0, 'progress', scan.index, scan.total); progressElapsed = 0;
+                progress(scan.index, scan.total); progressElapsed = 0;
             }
         } else {
             for (key in dirtyScenes) if (dirtyScenes.hasOwnProperty(key) && count < CHUNK) {
                 i = Number(key); delete dirtyScenes[key];
                 if (i < target.length) { readScene(i, target, signatures); count++; }
             }
+            for (var priority = 2; priority > 0; priority--)
+                for (key in priorityTiming) if (priorityTiming.hasOwnProperty(key) && priorityTiming[key] === priority && count < CHUNK) {
+                    i = Number(key); delete priorityTiming[key]; delete dirtyTiming[key];
+                    if (i < target.length) { target[i].loopBeats = loopAt(i); count++; }
+                }
             for (key in dirtyTiming) if (dirtyTiming.hasOwnProperty(key) && count < CHUNK) {
                 i = Number(key); delete dirtyTiming[key];
                 if (i < target.length) { target[i].loopBeats = loopAt(i); count++; }
@@ -168,23 +203,21 @@ function workTick() {
         }
         // Signature defaults are cached; no per-scene LiveAPI reads on a global change.
         for (i = 0; i < target.length; i++) if (signatures[i] === null) target[i].beatsPerBar = songBeats;
-        if (scan && scan.index === scan.total && !hasEntries(dirtyScenes) && !hasEntries(dirtyTiming)) {
+        if (scan && scan.index === scan.total && !hasEntries(dirtyScenes) && !hasEntries(dirtyTiming) && !hasEntries(priorityTiming)) {
             rows = target; overrides = signatures;
-            var total = scan.total; scan = null; publish(); outlet(0, 'progress', total, total);
+            var total = scan.total; scan = null; publish(); progress(total, total); retryDelay = 1000;
             // Playback is a separate bounded tick from the last scene slice.
             playbackPending = true; requestWork(); return;
         }
-        if (!scan) publish();
-        if (scan || hasEntries(dirtyScenes) || hasEntries(dirtyTiming)) requestWork();
+        if (!scan) { publish(); retryDelay = 1000; }
+        if (scan || hasEntries(dirtyScenes) || hasEntries(dirtyTiming) || hasEntries(priorityTiming)) requestWork();
     } catch (e) {
-        post('Setlist Touch refresh: ' + e + '\n');
-        // Keep the last complete snapshot. Retry from a clean generation.
-        rebuild();
+        workFailed(e);
     }
 }
 function sweepTick() {
     if (!active) return;
-    if (!scan && rows.length) {
+    if (!retryPending && !scan && rows.length) {
         for (var i = 0; i < CHUNK; i++) {
             dirtyTiming[sweepIndex] = true; sweepIndex = (sweepIndex + 1) % rows.length;
         }
@@ -194,12 +227,12 @@ function sweepTick() {
 }
 function queueSong(index) {
     if (index < 0 || index >= rows.length) return;
-    dirtyTiming[index] = true;
+    priorityTiming[index] = 2;
     var start = index, end = index + 1;
     while (start > 0 && !/^\*\s/.test(rows[start].name)) start--;
     if (!/^\*\s/.test(rows[start].name) || /^\*\s*\[\[/.test(rows[start].name)) return;
     while (end < rows.length && !/^\*\s/.test(rows[end].name)) end++;
-    for (var i = start; i < end; i++) dirtyTiming[i] = true;
+    for (var i = start; i < end; i++) if (priorityTiming[i] !== 2) priorityTiming[i] = 1;
 }
 function slotIndex(value) {
     value = Number(value);
@@ -251,10 +284,12 @@ function fire(index, expectedName) {
 }
 function notifydeleted() {
     active = false; generation++;
-    if (work) work.cancel(); if (sweep) sweep.cancel();
-    releaseAll(rootObservers); releaseAll(sceneObservers); releaseAll(trackObservers); releaseAll(retired);
-    release(positionObserver); release(root);
+    if (work) work.cancel(); if (sweep) sweep.cancel(); if (retry) retry.cancel();
+    // Max destroys the js-owned LiveAPI objects. Guards above make callbacks inert;
+    // explicit refresh still drains obsolete scene subscriptions in bounded slices.
+    rootObservers = []; sceneObservers = []; trackObservers = []; retired = [];
     root = null; positionObserver = null; positionKey = ''; timingPath = null; timingCount = 0;
     rows = []; overrides = []; scan = null; playing = -1; fired = -1; rowsJSON = null;
-    dirtyScenes = {}; dirtyTiming = {}; sweepIndex = 0; playbackPending = false;
+    dirtyScenes = {}; dirtyTiming = {}; priorityTiming = {}; sweepIndex = 0; playbackPending = false;
+    retryPending = false; lastProgress = null; sceneIds = '';
 }

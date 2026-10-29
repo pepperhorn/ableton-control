@@ -2,13 +2,13 @@
 autowatch = 1;
 inlets = 1;
 outlets = 1;
-var MIX_CHUNK = 1, MIX_SEND_CHUNK = 6, MIX_SLICE_MS = 15;
+var MIX_CHUNK = 1, MIX_TRACK_CHUNK = 12, MIX_SEND_CHUNK = 6, MIX_SLICE_MS = 15;
 var scanTask = null, scan = null, retired = [];
 var root = null, mixDict = null, debounce = null, levelTask = null;
 var rootObservers = [], metadataObservers = [], sendObservers = [];
 var active = false, building = false, dirty = true, generation = 0, levelsPending = false;
-var snapshot = {returns:[], tracks:[]}, trackIds = '', returnIds = '', pendingLevels = {};
-var trackApis = {}, returnApis = {}, sendApis = {}, retryDelay = 1000;
+var snapshot = {returns:[], tracks:[]}, trackIds = '', returnIds = '', pendingLevels = {}, scanLevels = {};
+var trackApis = {}, returnApis = {}, sendApis = {}, retryDelay = 1000, published = null;
 
 function scalar(api, property) {
     var value = api.get(property);
@@ -62,6 +62,10 @@ function schedule() {
     if (scanTask) scanTask.cancel();
     debounce.cancel(); debounce.schedule(200);
 }
+function ready() {
+    if (!active) { refresh(); return; }
+    if (published) outlet(0, 'mix');
+}
 function refresh() {
     if (debounce) debounce.cancel(); if (levelTask) levelTask.cancel(); if (scanTask) scanTask.cancel();
     releaseAll(rootObservers); release(root);
@@ -75,10 +79,14 @@ function refresh() {
     building = false; rebuild();
 }
 function valueChanged(trackIndex, returnIndex, api, version) {
-    if (!active || building || (dirty && !scan) || version !== generation || !api || !api.id) return;
-    pendingLevels[trackIndex + ':' + returnIndex] = {trackIndex:trackIndex, returnIndex:returnIndex, api:api};
-    // One scheduled batch, regardless of how many knobs change within this window.
-    if (!dirty && !levelsPending) { levelsPending = true; levelTask.schedule(33); }
+    if (!active || building || (version !== generation && (!published || version !== published.generation)) || !api || !api.id) return;
+    var entry = {trackIndex:trackIndex, returnIndex:returnIndex, api:api};
+    if (!published || version !== published.generation) {
+        scanLevels[trackIndex + ':' + returnIndex] = entry; return;
+    }
+    pendingLevels[trackIndex + ':' + returnIndex] = entry;
+    // Published faders still echo at the usual cadence during a rescan.
+    if (!levelsPending) { levelsPending = true; levelTask.schedule(33); }
 }
 function observeSend(path, trackIndex, returnIndex) {
     var version = generation, api;
@@ -87,11 +95,12 @@ function observeSend(path, trackIndex, returnIndex) {
 }
 function flushLevels() {
     levelsPending = false;
+    if (!active || building || !published) return;
     var pending = pendingLevels; pendingLevels = {};
-    if (!active || building || dirty) return;
     for (var key in pending) if (pending.hasOwnProperty(key)) {
         var entry = pending[key];
         try {
+            if (!entry.api || !entry.api.id) continue;
             var level = readLevel(entry.api);
             if (!level) continue;
             for (var i = 0; i < snapshot.tracks.length; i++) if (snapshot.tracks[i].index === entry.trackIndex)
@@ -103,8 +112,10 @@ function flushLevels() {
 function rebuild() {
     if (!active || building) return;
     dirty = true; generation++; debounce.cancel(); scanTask.cancel();
-    levelTask.cancel(); levelsPending = false; pendingLevels = {};
-    retired = retired.concat(metadataObservers, sendObservers);
+    scanLevels = {};
+    if (!published) { levelTask.cancel(); levelsPending = false; pendingLevels = {}; }
+    if (!published || metadataObservers !== published.metadataObservers)
+        retired = retired.concat(metadataObservers, sendObservers);
     metadataObservers = []; sendObservers = [];
     trackApis = {}; returnApis = {}; sendApis = {};
     scan = {next:{returns:[], tracks:[]}, index:0, phase:'returns'};
@@ -115,13 +126,16 @@ function rebuild() {
     } catch (e) { scanFailed(e); }
 }
 function scanFailed(error) {
-    dirty = true; scan = null;
-    retired = retired.concat(metadataObservers, sendObservers);
+    dirty = true; scan = null; scanLevels = {};
+    if (!published || metadataObservers !== published.metadataObservers)
+        retired = retired.concat(metadataObservers, sendObservers);
     metadataObservers = []; sendObservers = [];
     trackApis = {}; returnApis = {}; sendApis = {};
     debounce.cancel(); debounce.schedule(retryDelay); retryDelay = Math.min(8000, retryDelay * 2);
-    snapshot = {returns:[], tracks:[]};
-    mixDict.set('mix', JSON.stringify(snapshot)); outlet(0, 'mix');
+    if (!published) {
+        snapshot = {returns:[], tracks:[]};
+        mixDict.set('mix', JSON.stringify(snapshot)); outlet(0, 'mix');
+    }
     post('Setlist Touch mix refresh: ' + error + '\n');
     if (retired.length) scanTask.schedule(MIX_SLICE_MS);
 }
@@ -148,13 +162,13 @@ function scanTick() {
             if (scan.index === scan.returnCount) { scan.phase = 'tracks'; scan.index = 0; }
         } else if (scan.phase === 'tracks') {
             // Sends are their own phase, so even an unusually large return count stays bounded.
-            if (scan.index < scan.trackCount) {
+            for (; count < MIX_TRACK_CHUNK && scan.index < scan.trackCount; count++) {
                 i = scan.index; path = 'live_set tracks ' + i;
                 api = watch(path, 'name', schedule, metadataObservers); trackApis[i] = api;
                 item = {index:i, name:text(api, 'name'), color:Number(scalar(api, 'color')), sends:[]};
                 watch(path, 'color', schedule, metadataObservers);
                 if (item.name.indexOf('+ ') === 0) {
-                    next.tracks.push(item); scan.item = item; scan.sendIndex = 0; scan.phase = 'sends';
+                    next.tracks.push(item); scan.item = item; scan.sendIndex = 0; scan.phase = 'sends'; break;
                 } else scan.index++;
             }
         } else {
@@ -173,7 +187,16 @@ function scanTick() {
             if (j === scan.returnCount) { scan.index++; scan.phase = 'tracks'; }
         }
         if (scan.phase === 'tracks' && scan.index === scan.trackCount) {
+            if (published) retired = retired.concat(published.metadataObservers, published.sendObservers);
             snapshot = next; scan = null; dirty = false;
+            published = {trackApis:trackApis, returnApis:returnApis, sendApis:sendApis,
+                trackIds:trackIds, returnIds:returnIds, metadataObservers:metadataObservers,
+                sendObservers:sendObservers, generation:generation};
+            for (var scanKey in scanLevels) if (scanLevels.hasOwnProperty(scanKey)) pendingLevels[scanKey] = scanLevels[scanKey];
+            scanLevels = {};
+            for (var pendingKey in pendingLevels) if (pendingLevels.hasOwnProperty(pendingKey))
+                pendingLevels[pendingKey].api = sendApis[pendingKey];
+            if (retired.length) scanTask.schedule(MIX_SLICE_MS);
             mixDict.set('mix', JSON.stringify(snapshot)); outlet(0, 'mix'); retryDelay = 1000;
             for (var key in pendingLevels) if (pendingLevels.hasOwnProperty(key)) {
                 levelsPending = true; levelTask.schedule(33); break;
@@ -183,29 +206,37 @@ function scanTick() {
     finally { building = false; }
 }
 function send(trackIndex, returnIndex, value, expectedTrackName, expectedReturnName) {
-    if (!active || dirty || building || !root) return;
+    if (!active || building || !root || !published) return;
     trackIndex = Number(trackIndex); returnIndex = Number(returnIndex); value = Number(value);
     if (!isFinite(value) || value < 0 || value > 1 || trackIndex < 0 || returnIndex < 0 ||
         trackIndex !== Math.floor(trackIndex) || returnIndex !== Math.floor(returnIndex)) return;
     var track = null, ret = snapshot.returns[returnIndex], i;
-    var api = trackApis[trackIndex], returnApi = returnApis[returnIndex], param = sendApis[trackIndex + ':' + returnIndex];
+    var api = published.trackApis[trackIndex], returnApi = published.returnApis[returnIndex], param = published.sendApis[trackIndex + ':' + returnIndex];
     for (i = 0; i < snapshot.tracks.length; i++) if (snapshot.tracks[i].index === trackIndex) track = snapshot.tracks[i];
     if (!track || !ret || ret.routedToMain !== false || !track.sends[returnIndex] ||
         track.name !== expectedTrackName || ret.name !== expectedReturnName ||
         !api || !api.id || !returnApi || !returnApi.id || !param || !param.id) return;
     try {
         // Recheck Live at the final write boundary, including edits before observer delivery.
-        if (String(root.get('tracks')) !== trackIds || String(root.get('return_tracks')) !== returnIds) { schedule(); return; }
-        // Reuse this generation's observed objects; rebuild/deletion owns their release.
-        if (text(api, 'name') !== track.name || text(returnApi, 'name') !== ret.name || routedToMain(returnApi) !== false) { schedule(); return; }
+        // Compare the target slots' IDs, so unrelated additions/removals do not
+        // disable a still-valid fader. Moved/replaced targets always fail closed.
+        var currentTracks = String(root.get('tracks')).split(','), currentReturns = String(root.get('return_tracks')).split(',');
+        var expectedTracks = published.trackIds.split(','), expectedReturns = published.returnIds.split(',');
+        if (currentTracks[trackIndex * 2 + 1] !== expectedTracks[trackIndex * 2 + 1] ||
+            currentReturns[returnIndex * 2 + 1] !== expectedReturns[returnIndex * 2 + 1]) { if (!dirty) schedule(); return; }
+        // Reuse the published generation until its replacement is complete.
+        if (text(api, 'name') !== track.name || text(returnApi, 'name') !== ret.name || routedToMain(returnApi) !== false) { if (!dirty) schedule(); return; }
         param.set('value', value);
     } catch (e) { post('Setlist Touch send ignored: ' + e + '\n'); schedule(); }
 }
 function notifydeleted() {
     active = false; dirty = true; generation++;
     if (debounce) debounce.cancel(); if (levelTask) levelTask.cancel();
-    if (scanTask) scanTask.cancel(); scan = null; releaseAll(retired);
-    releaseAll(rootObservers); releaseAll(metadataObservers); releaseAll(sendObservers); release(root);
+    if (scanTask) scanTask.cancel(); scan = null;
+    // Max frees js-owned LiveAPI objects at teardown. Avoid a synchronous release
+    // of both the published and in-flight generations; active guards callbacks.
+    retired = []; rootObservers = []; metadataObservers = []; sendObservers = [];
+    published = null;
     trackApis = {}; returnApis = {}; sendApis = {};
-    levelsPending = false; root = null; snapshot = {returns:[], tracks:[]}; pendingLevels = {}; trackIds = ''; returnIds = '';
+    levelsPending = false; root = null; snapshot = {returns:[], tracks:[]}; pendingLevels = {}; scanLevels = {}; trackIds = ''; returnIds = '';
 }

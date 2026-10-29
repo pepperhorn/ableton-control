@@ -200,6 +200,19 @@
    },
    {
     "box": {
+     "id": "ready",
+     "maxclass": "message",
+     "patching_rect": [
+      500,
+      120,
+      220,
+      22
+     ],
+     "text": "ready"
+    }
+   },
+   {
+    "box": {
      "id": "address-set",
      "maxclass": "newobj",
      "patching_rect": [
@@ -221,7 +234,7 @@
       220,
       22
      ],
-     "text": "sprintf symout Indexing scenes %ld / %ld…"
+     "text": "sprintf Indexing scenes %ld / %ld…"
     }
    },
    {
@@ -599,7 +612,7 @@
       3
      ],
      "destination": [
-      "refresh",
+      "ready",
       0
      ]
     }
@@ -732,6 +745,42 @@
      ],
      "destination": [
       "mix",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "ready",
+      0
+     ],
+     "destination": [
+      "lom",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "ready",
+      0
+     ],
+     "destination": [
+      "mix",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "ready",
+      0
+     ],
+     "destination": [
+      "transport",
       0
      ]
     }

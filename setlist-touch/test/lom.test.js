@@ -1,6 +1,6 @@
 const {test}=require('node:test');const a=require('node:assert/strict');const vm=require('vm'),fs=require('fs'),path=require('path');
 function harness(size){
- const outputs=[],calls=[],observers=[],tasks=[],dict={},logs=[],gets=[],writes=[];let created=0, operations=0, now=0; const ticks=[],progressTimes=[];
+ const outputs=[],calls=[],observers=[],tasks=[],dict={},logs=[],gets=[],writes=[];let created=0, operations=0, now=0; const ticks=[],progressTimes=[],failGets={};
  const data={live_set:{scenes:['id',10,'id',11,'id',12],tracks:['id',20,'id',21],signature_numerator:4,signature_denominator:4},
  'live_set scenes 0':{name:'* RISE >>',color:0xffffff,time_signature_enabled:0},
  'live_set scenes 1':{name:'[N32] AA',color:0x22d44a,time_signature_enabled:0},
@@ -19,7 +19,7 @@ function harness(size){
    data['live_set tracks 1 clip_slots '+i+' clip']={is_audio_clip:1,warping:1,loop_start:4,loop_end:132,playing_position:46};
   }
  }
- function LiveAPI(callback,p){created++;operations++;this.path=typeof callback==='string'?callback:p;this.callback=typeof callback==='function'?callback:null;this._id=1;Object.defineProperty(this,'id',{get:()=>this._id,set:v=>{operations++;this._id=v;}});this.get=prop=>{operations++;gets.push([this.path,prop]);if(!data[this.path]||!(prop in data[this.path]))throw new Error('Unknown '+this.path+' '+prop);const v=data[this.path][prop];return Array.isArray(v)?v:[v];};this.getcount=prop=>{operations++;return data[this.path][prop].length/2;};this.call=(...args)=>calls.push([this.path,...args]);Object.defineProperty(this,'property',{get:()=>this._property,set:v=>{operations++;this._property=v; if(v&&this.callback)this.callback([v]);}});if(this.callback)observers.push(this);}
+ function LiveAPI(callback,p){created++;operations++;this.path=typeof callback==='string'?callback:p;this.callback=typeof callback==='function'?callback:null;this._id=1;Object.defineProperty(this,'id',{get:()=>this._id,set:v=>{operations++;this._id=v;}});this.get=prop=>{operations++;gets.push([this.path,prop]);if(failGets[this.path+':'+prop]>0){failGets[this.path+':'+prop]--;throw Error('Persistent read failure');}if(!data[this.path]||!(prop in data[this.path]))throw new Error('Unknown '+this.path+' '+prop);const v=data[this.path][prop];return Array.isArray(v)?v:[v];};this.getcount=prop=>{operations++;return data[this.path][prop].length/2;};this.call=(...args)=>calls.push([this.path,...args]);Object.defineProperty(this,'property',{get:()=>this._property,set:v=>{operations++;this._property=v; if(v&&this.callback)this.callback([v]);}});if(this.callback)observers.push(this);}
  function Task(fn,context){this.fn=fn.bind(context);this.schedule=ms=>{this.pending=true;this.due=now+ms;};this.cancel=()=>{this.pending=false;this.repeating=false;};tasks.push(this);}
  function Dict(){this.set=(key,value)=>{dict[key]=value;writes.push([key,value]);};}
  const ctx=vm.createContext({LiveAPI,Task,Dict,outlet:(...args)=>{outputs.push(args);if(args[1]==='progress')progressTimes.push(now);},post:message=>logs.push(message)});
@@ -35,11 +35,18 @@ function harness(size){
  const advance=ms=>{const end=now+ms;for(let n=0;n<20000;n++){const next=tasks.filter(t=>t.pending).sort((a,b)=>a.due-b.due)[0];if(!next||next.due>end){now=end;return;}tick(true);}throw Error('Task loop');};
 
  const changed=(p,prop)=>{for(const o of observers.filter(o=>o.id&&o.path===p&&o.property===prop))o.callback([prop,...[].concat(data[p][prop])]);flush();};
- return {ctx,data,outputs,calls,observers,tasks,dict,logs,gets,writes,flush,tick,ticks,progressTimes,advance,changed,get created(){return created;}};
+ const destroy=()=>{
+  const before=operations, emitted=outputs.length, callbacks=observers.filter(o=>o.id&&o.callback);
+  ctx.notifydeleted();a.equal(operations,before,'deletion makes no LiveAPI calls');
+  callbacks.forEach(o=>o.callback());a.equal(outputs.length,emitted);a.ok(tasks.every(t=>!t.pending));
+  // Model the host freeing subscriptions when the js object is destroyed.
+  observers.forEach(o=>o._id=0);
+ };
+ return {destroy,failGets,get operations(){return operations;},get now(){return now;},ctx,data,outputs,calls,observers,tasks,dict,logs,gets,writes,flush,tick,ticks,progressTimes,advance,changed,get created(){return created;}};
 }
 test('LiveAPI stays lazy, reads scenes/signatures/loops and fires valid scenes',()=>{const h=harness();a.equal(h.created,0);h.ctx.refresh();h.flush();const raw=JSON.parse(h.dict.scenes);a.equal(raw.length,3);a.equal(raw[1].loopBeats,128);a.equal(raw[0].loopBeats,null);a.equal(raw[2].beatsPerBar,3);h.ctx.fire(1,'[N32] AA');h.ctx.fire(-1);h.ctx.fire(99);h.ctx.fire(1.5);a.deepEqual(h.calls,[['live_set scenes 1','fire']]);a.ok(h.outputs.some(o=>o[1]==='scenes'));a.ok(h.outputs.some(o=>o[1]==='pos'&&o[2]===1&&o[3]===46&&o[4]===4));});
 test('rename and signature observers rebuild without leaking observers',()=>{const h=harness();h.ctx.refresh();h.flush();const count=h.observers.filter(o=>o.id).length;h.data['live_set scenes 1'].name='RENAMED';h.changed('live_set scenes 1','name');a.equal(JSON.parse(h.dict.scenes)[1].name,'RENAMED');a.equal(h.observers.filter(o=>o.id).length,count);h.data.live_set.signature_numerator=3;h.changed('live_set','signature_numerator');a.equal(JSON.parse(h.dict.scenes)[1].beatsPerBar,3);});
-test('playing slot retargets position and negative fired becomes -1',()=>{const h=harness();h.ctx.refresh();h.flush();h.data['live_set tracks 1'].playing_slot_index=2;h.data['live_set tracks 1'].fired_slot_index=-2;h.changed('live_set tracks 1','playing_slot_index');a.ok(h.outputs.some(o=>o[1]==='play'&&o[2]===2&&o[3]===-1));a.ok(h.outputs.some(o=>o[1]==='pos'&&o[2]===2&&o[6]===3));h.ctx.notifydeleted();a.equal(h.observers.filter(o=>o.id).length,0);});
+test('playing slot retargets position and negative fired becomes -1',()=>{const h=harness();h.ctx.refresh();h.flush();h.data['live_set tracks 1'].playing_slot_index=2;h.data['live_set tracks 1'].fired_slot_index=-2;h.changed('live_set tracks 1','playing_slot_index');a.ok(h.outputs.some(o=>o[1]==='play'&&o[2]===2&&o[3]===-1));a.ok(h.outputs.some(o=>o[1]==='pos'&&o[2]===2&&o[6]===3));h.destroy();a.equal(h.observers.filter(o=>o.id).length,0);});
 test('track changes rebind to the final regular track; missing clips have no outline',()=>{
  const h=harness();h.ctx.refresh();h.flush();
  h.data.live_set.tracks=['id',20,'id',21,'id',22];
@@ -112,7 +119,7 @@ test('structure changes retain launchable old snapshot, chunk cleanup and cancel
  h.ctx.fire(1,'Row 1');a.deepEqual(h.calls.at(-1),['live_set scenes 1','fire']);
  h.ctx.rebuild();h.flush();a.equal(JSON.parse(h.dict.scenes)[0].name,'* Replacement');
  a.ok(h.ticks.every(t=>t.operations<=150));a.equal(h.observers.filter(o=>o.id&&o.path.startsWith('live_set scenes ')).length,5000);
- h.ctx.rebuild();h.tick();h.ctx.notifydeleted();a.equal(h.observers.filter(o=>o.id).length,0);a.ok(h.tasks.every(t=>!t.pending));
+ h.ctx.rebuild();h.tick();h.destroy();a.equal(h.observers.filter(o=>o.id).length,0);a.ok(h.tasks.every(t=>!t.pending));
  h.ctx.refresh();h.flush();a.equal(JSON.parse(h.dict.scenes).length,1000);
 });
 test('playback remains observable while a chunked re-index is in flight',()=>{
@@ -138,8 +145,70 @@ test('scene-list notifications re-index in slices without publishing a partial r
  a.equal(JSON.parse(h.dict.scenes).length,999);a.ok(h.ticks.every(t=>t.operations<=150));
  a.equal(h.observers.filter(o=>o.id&&o.path==='live_set scenes 999').length,0);
 });
-test('deletion during an initial partial scan leaves no subscriptions or scheduled work',()=>{
+test('deletion during an initial partial scan leaves callbacks inert until host teardown',()=>{
  const h=harness(1000);h.ctx.refresh();h.tick();h.tick();a.equal(h.dict.scenes,undefined);
- h.ctx.notifydeleted();a.equal(h.observers.filter(o=>o.id).length,0);a.ok(h.tasks.every(t=>!t.pending));
+ h.destroy();a.equal(h.observers.filter(o=>o.id).length,0);a.ok(h.tasks.every(t=>!t.pending));
  h.ctx.refresh();h.flush();a.equal(JSON.parse(h.dict.scenes).length,1000);
+});
+
+
+test('ready preserves an in-flight scan and replays completed scenes/progress without re-indexing',()=>{
+ const h=harness(683);h.ctx.refresh();for(let i=0;i<20;i++)h.tick();
+ const scan=h.ctx.scan,index=scan.index,created=h.created,tasks=h.tasks.length;
+ h.ctx.ready();a.equal(h.ctx.scan,scan);a.equal(scan.index,index);a.equal(h.tasks.length,tasks);
+ a.ok(h.created-created<=5,'ready only reads playback');h.flush();
+ const observers=h.observers.length,reads=h.gets.filter(([p])=>/^live_set scenes /.test(p)).length;
+ h.outputs.length=0;h.ctx.ready();h.flush();
+ a.equal(h.observers.length,observers);a.equal(h.gets.filter(([p])=>/^live_set scenes /.test(p)).length,reads);
+ a.ok(h.outputs.some(o=>o[1]==='scenes'));a.deepEqual(h.outputs.find(o=>o[1]==='progress'),[0,'progress',683,683]);
+ const fresh=harness();fresh.ctx.ready();fresh.flush();a.equal(JSON.parse(fresh.dict.scenes).length,3);
+});
+
+test('tracks-only changes preserve scene observers and prioritise playing/queued/song timing without progress',()=>{
+ const h=harness(1000);h.ctx.refresh();h.flush();
+ const sceneObservers=h.observers.filter(o=>o.path.startsWith('live_set scenes '));
+ h.data.live_set.tracks.push('id',22);
+ h.data['live_set tracks 2']={playing_slot_index:77,fired_slot_index:98};
+ for(let i=0;i<1000;i++){
+  h.data['live_set tracks 2 clip_slots '+i]={has_clip:1};
+  h.data['live_set tracks 2 clip_slots '+i+' clip']={is_audio_clip:0,loop_start:0,loop_end:64,playing_position:1};
+ }
+ const snapshot=h.dict.scenes;h.gets.length=0;h.outputs.length=0;
+ h.ctx.tracksChanged();a.equal(h.dict.scenes,snapshot);a.equal(h.ctx.scan,null);
+ h.gets.length=0;h.tick();
+ const first=h.gets.filter(([p,prop])=>p.includes('clip_slots')&&prop==='has_clip').map(([p])=>Number(p.split(' ').at(-1)));
+ a.ok(first.includes(77)&&first.includes(98),JSON.stringify(first));
+ h.gets.length=0;h.tick();
+ a.ok(h.gets.every(([p])=>!p.includes('clip_slots')||(/clip_slots (6[0-9]|7[0-9]|8[0-9]|9[0-9])(?: |$)/).test(p)),'current songs before background rows');
+ h.flush();a.ok(!h.gets.some(([p])=>p.startsWith('live_set scenes ')));
+ a.deepEqual(h.observers.filter(o=>o.path.startsWith('live_set scenes ')),sceneObservers);
+ a.ok(sceneObservers.every(o=>o.id));a.ok(!h.outputs.some(o=>o[1]==='progress'));
+ a.ok(JSON.parse(h.dict.scenes).every(r=>r.loopBeats===64));a.ok(h.ticks.every(t=>t.operations<=150));
+});
+
+test('tracks notification with changed scene IDs still re-indexes even when scene count is unchanged',()=>{
+ const h=harness();h.ctx.refresh();h.flush();h.data.live_set.scenes[1]=999;
+ h.ctx.tracksChanged();a.ok(h.ctx.scan);h.flush();
+});
+
+test('deleting a full index with retired generations performs zero LiveAPI writes and stale callbacks are inert',()=>{
+ const h=harness(1000);h.ctx.refresh();h.flush();h.ctx.rebuild();h.tick();h.destroy();
+ a.equal(h.ctx.root,null);a.ok(h.tasks.every(t=>!t.pending));
+});
+
+test('persistent work exceptions retry at 1/2/4/8 seconds, keep the snapshot and reset after recovery',()=>{
+ const h=harness(1000);h.ctx.refresh();h.flush();const snapshot=h.dict.scenes;
+ h.failGets['live_set scenes 77:name']=Infinity;h.data['live_set scenes 77'].name='Recovered';
+ h.ctx.sceneChanged(77,h.ctx.generation);
+ for(const delay of [1000,2000,4000,8000,8000]){
+  while(!h.ctx.retryPending)a.ok(h.tick());
+  a.equal(h.ctx.retry.due-h.now,delay);a.equal(h.dict.scenes,snapshot);
+  const logs=h.logs.length;h.ctx.sweepTick();h.ctx.sceneChanged(77,h.ctx.generation);h.ctx.playbackChanged();
+  h.advance(delay-1);a.equal(h.logs.length,logs);a.equal(h.ctx.retryPending,true);
+  h.advance(1);a.equal(h.ctx.retryPending,false);
+ }
+ h.failGets['live_set scenes 77:name']=0;h.flush();a.equal(JSON.parse(h.dict.scenes)[77].name,'Recovered');
+ a.equal(h.ctx.retryDelay,1000);a.equal(h.logs.filter(l=>l.includes('retry in')).length,5);
+ h.failGets['live_set scenes 77:name']=1;h.ctx.sceneChanged(77,h.ctx.generation);h.tick();
+ a.equal(h.ctx.retry.due-h.now,1000);h.destroy();a.ok(h.ticks.every(t=>t.operations<=150));
 });
