@@ -3,16 +3,17 @@
 > Single writer: the **lead**, on the main branch only. Implementers report status through their return handoff.
 > Status: proposed · specced · planned · dispatched · in-review · changes-requested · ready · merged · closed · blocked · parked
 
-Next ID: 0005
+Next ID: 0006
 
 ## Active
 
 | K | Title | Status | Owner (provider/model) | Branch | PR | Worktree | T3 task/thread | Spec | Plan | Latest handoff | Updated |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
 | 0003 | Transport header | https://github.com/pepperhorn/ableton-control/pull/3 | 2026-10-29 (squash of reviewed bfd084a) | Opus approved r2. Optional: extra lost-pointer safeguard (transport-render.js:66). Verify in Live: get_current_beats_song_time format, play/stop idempotence, Arrangement Record toggle. |
 | 0002 | In-ear mix pages (phase 2) | https://github.com/pepperhorn/ableton-control/pull/2 | 2026-10-29 (22b634a, squash of reviewed cd24b83) | Opus approved r2. Optional nits: late mid-drag echo or cancel() clears release hold early. Needs user verification in Live 12/Windows: routing JSON and Main/Master name, echo latency vs 1 s hold, send labels, touch. |
 | 0001 | Setlist Touch (phase 1) | https://github.com/pepperhorn/ableton-control/pull/1 | 2026-10-29 (e2bc976, squash of reviewed a3f2853) | Opus approved r2. Minor follow-ups folded into 0002: Space blocked in settings inputs; extra LiveAPI reads per position update; empty set shows Reconnecting. Needs user verification in Live on Windows (touch in jweb, END-row empty name, window open/resize). |
+| 0005 | Large-set performance + indexing progress (683-scene set froze Live) | dispatched | codex/gpt-6.1-sol | orch/0005-large-set-performance | — | T3 | (pending) | docs/specs/0005-large-set-performance.md | in handoff | docs/handoffs/2026-10-29-0005-large-set-performance--lead-to-codex.md | 2026-10-29 |
+| 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
 
 ## Done / closed
 
@@ -21,6 +22,7 @@ Next ID: 0005
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-10-29 0005 →dispatched — user test: 683-scene set froze Live on load (sync scan + 5 s full poll); add chunked indexing + progress feedback; Sol in worktree
 2026-10-29 0004 →proposed — idea filed by user; not prioritised. Note: Live MIDI Map can't learn Program Change (FCB1010 default), so in-device MIDI learn is the likely approach. Interim: SceneNav device is MIDI-mappable via CC/notes.
 2026-10-29 0003 in-review→merged — PR #3; 104 tests on main; GBrain: pending write-back
 2026-10-29 0003 changes-requested→in-review — r2 head bfd084a; Opus review r2
