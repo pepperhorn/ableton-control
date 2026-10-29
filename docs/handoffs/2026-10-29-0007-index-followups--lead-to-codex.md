@@ -7,7 +7,7 @@
 - **PR:** (opened by implementer)
 - **Base commit:** 72096c35e2643a722627ed53478e605d0c040e0d
 - **Port (if running a server):** 5270 (`SETLIST_TOUCH_PORT=5270 SETLIST_TOUCH_SLOW_INDEX=1 node device/dev.js`)
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 Fix the six non-blocking findings from Opus's approved review of PR #4 (0005), without weakening 0005's per-tick budget or its safety guarantees. The full review, with file:line references, is at https://github.com/pepperhorn/ableton-control/pull/4 (`gh pr view 4 --json reviews --jq '.reviews[-1].body'`).
