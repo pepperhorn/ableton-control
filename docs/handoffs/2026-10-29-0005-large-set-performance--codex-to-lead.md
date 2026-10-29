@@ -6,7 +6,7 @@
 - **Plan:** single task in [dispatch handoff](2026-10-29-0005-large-set-performance--lead-to-codex.md)
 - **Branch:** orch/0005-large-set-performance
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-b74d6a78
-- **PR:** pending creation after this handoff is committed and pushed
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/4 (draft)
 - **Base commit:** cbde2eed84a8a4d2cf6b2d377b400fb585ec49ab (dispatch document commit: 633d4c7a909c0380ce9b62c2778c595324400758)
 - **Implementation commit:** f44c93fa70e649dfed4a337991a6186a858203b4
 - **Port:** 5250; fixture process stopped and browser tabs closed after verification
