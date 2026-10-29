@@ -64,7 +64,8 @@ function schedule() {
 }
 function ready() {
     if (!active) { refresh(); return; }
-    if (published) outlet(0, 'mix');
+    // Levels update snapshot in memory only; rewrite the Dict so Node replays current values.
+    if (published) { mixDict.set('mix', JSON.stringify(snapshot)); outlet(0, 'mix'); }
 }
 function refresh() {
     if (debounce) debounce.cancel(); if (levelTask) levelTask.cancel(); if (scanTask) scanTask.cancel();
@@ -218,12 +219,12 @@ function send(trackIndex, returnIndex, value, expectedTrackName, expectedReturnN
         !api || !api.id || !returnApi || !returnApi.id || !param || !param.id) return;
     try {
         // Recheck Live at the final write boundary, including edits before observer delivery.
-        // Compare the target slots' IDs, so unrelated additions/removals do not
-        // disable a still-valid fader. Moved/replaced targets always fail closed.
-        var currentTracks = String(root.get('tracks')).split(','), currentReturns = String(root.get('return_tracks')).split(',');
-        var expectedTracks = published.trackIds.split(','), expectedReturns = published.returnIds.split(',');
+        // Compare the target track slot's ID, so unrelated track additions/removals do not
+        // disable a still-valid fader. Sends are positional per return, so any return-list
+        // change fails closed (returns are rarely edited mid-show).
+        var currentTracks = String(root.get('tracks')).split(','), expectedTracks = published.trackIds.split(',');
         if (currentTracks[trackIndex * 2 + 1] !== expectedTracks[trackIndex * 2 + 1] ||
-            currentReturns[returnIndex * 2 + 1] !== expectedReturns[returnIndex * 2 + 1]) { if (!dirty) schedule(); return; }
+            String(root.get('return_tracks')) !== published.returnIds) { if (!dirty) schedule(); return; }
         // Reuse the published generation until its replacement is complete.
         if (text(api, 'name') !== track.name || text(returnApi, 'name') !== ret.name || routedToMain(returnApi) !== false) { if (!dirty) schedule(); return; }
         param.set('value', value);

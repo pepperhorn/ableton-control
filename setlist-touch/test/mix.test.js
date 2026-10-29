@@ -255,3 +255,17 @@ test('published faders echo within 33 ms during a rescan and draft callbacks sta
  h.tick(h.tasks[1]);a.ok(!h.out.some(o=>o[1]==='level'),'unpublished generation cannot emit levels');
  h.flush();a.ok(h.out.some(o=>o[1]==='level'&&o[4]===0.91));
 });
+
+test('ready rewrites the mix Dict so a restarted Node replays current levels',()=>{
+ const h=harness({size:4});h.ctx.refresh();h.flush();
+ h.data['live_set tracks 0 mixer_device sends 2'].value=0.9;h.changed('live_set tracks 0 mixer_device sends 2','value');h.flush();
+ a.equal(JSON.parse(h.dict.mix).tracks[0].sends[2].value,0.5);
+ h.ctx.ready();a.equal(JSON.parse(h.dict.mix).tracks[0].sends[2].value,0.9);
+});
+
+test('any change to the return list rejects sends, even to an untouched return slot',()=>{
+ const h=harness({size:4});h.ctx.refresh();h.flush();
+ h.ctx.send(0,3,0.7,'+ Track 0','Return 3');a.equal(h.writes.length,1);
+ h.data.live_set.return_tracks[1]=999;
+ h.ctx.send(0,3,0.8,'+ Track 0','Return 3');a.equal(h.writes.length,1);
+});
