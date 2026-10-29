@@ -6,7 +6,7 @@
 - **Plan:** single task in [0007 dispatch](2026-10-29-0007-index-followups--lead-to-codex.md)
 - **Branch:** orch/0007-index-followups
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-63b03fd2
-- **PR:** pending creation after this committed return handoff is pushed
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/5 (draft)
 - **Base commit:** 72096c35e2643a722627ed53478e605d0c040e0d; starting worktree HEAD ea87cb66c3c30ce74ebad313b610f2e5f547fc8c includes it
 - **Receiver ack commit:** 4e372f9
 - **Implementation commit:** 4deeb5ee0eadc5e3885467ee4d86bcd9b8d4b112
