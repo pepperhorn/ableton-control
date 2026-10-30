@@ -26,6 +26,7 @@ Next ID: 0010
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-10-31 0008 blocked→dispatched — Sol blocked: set payload omits non-song scenes; lead authorised additive play.current/next in lib/app.js; PR #6 draft, resumed Sol
 2026-10-31 0009 →specced — access design approved; follows 0008
 2026-10-31 0008 →dispatched — monitor design approved; Sol in worktree
 2026-10-31 0006 note — held: LOM may not expose clip follow actions, so generated timing clips may not advance with the music; check with user before speccing
