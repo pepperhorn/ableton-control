@@ -64,7 +64,7 @@ None.
 ---
 ## Receiver ack
 
-Acknowledged: implement Part 1 only as a read-only Monitor page, following Live current/queued state, timing progress, neutral transport and disconnect states, device page preference and Wake Lock. I will change only the owned files, test the pure view and three browser sizes, and return a committed handoff and draft PR. No open questions. GBrain search for m4l-control returned no relevant project pages.
+Acknowledged: implement Part 1 only as a read-only Monitor page, following Live current/queued state, timing progress, neutral transport and disconnect states, device page preference and Wake Lock. I will change only the owned files, test the pure view and three browser sizes, and return a committed handoff and draft PR. Added-scope acknowledgement (2026-10-31): read `2026-10-31-0008-monitor-tab--lead-to-codex-answers.md` at abc991a. I will enrich only current/next in the existing play event, refresh them on scenes/play and connect, preserve set and existing play fields, strip only a leading `* ` for display and use only playingSongId for the song title. Own app.js and app.test.js plus optional fixture bridge/dev changes per answers. Node 16 test runs are not required. No open questions. GBrain search for m4l-control returned no relevant project pages.
 
 ---
 ## Return (implementer → lead; fill in when done, or in a separate …-to-lead.md)
