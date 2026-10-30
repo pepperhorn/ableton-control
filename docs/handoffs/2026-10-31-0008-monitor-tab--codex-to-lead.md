@@ -5,7 +5,7 @@
 - **Ledger:** 0008 · **Spec:** [approved design, Part 1](../superpowers/specs/2026-10-30-monitor-and-access-design.md) · **Plan:** [dispatch handoff](2026-10-31-0008-monitor-tab--lead-to-codex.md)
 - **Branch:** orch/0008-monitor-tab
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-bba88117
-- **PR:** draft PR from this branch (URL recorded in final response)
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/6 (draft, blocked)
 - **Base commit:** cb7d989bcbad2ba0f940e04c5561f799fc795c80
 - **Port:** 5280 (not started)
 - **Status:** blocked
