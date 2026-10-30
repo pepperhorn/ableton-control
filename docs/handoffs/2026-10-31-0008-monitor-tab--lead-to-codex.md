@@ -64,5 +64,7 @@ None.
 ---
 ## Receiver ack
 
+Acknowledged: implement Part 1 only as a read-only Monitor page, following Live current/queued state, timing progress, neutral transport and disconnect states, device page preference and Wake Lock. I will change only the owned files, test the pure view and three browser sizes, and return a committed handoff and draft PR. No open questions. GBrain search for m4l-control returned no relevant project pages.
+
 ---
 ## Return (implementer → lead; fill in when done, or in a separate …-to-lead.md)
