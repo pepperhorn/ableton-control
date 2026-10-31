@@ -7,7 +7,7 @@
 - **PR:** (opened by implementer)
 - **Base commit:** cb7d989bcbad2ba0f940e04c5561f799fc795c80
 - **Port (if running a server):** 5280 (`SETLIST_TOUCH_PORT=5280 node device/dev.js`)
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 Add a read-only "Monitor" page beside "Scenes" and "My mix", showing the current scene and the flashing next scene, per Part 1 of the spec. Done means the behaviour is met, `npm test` passes and a draft PR is open. Part 2 (members and access) is out of scope.

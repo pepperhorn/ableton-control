@@ -4,7 +4,7 @@
 - **Type:** dispatch
 - **Ledger:** 0008 · **Spec:** docs/superpowers/specs/2026-10-30-monitor-and-access-design.md (Part 1)
 - **Branch:** orch/0008-monitor-tab · **PR:** https://github.com/pepperhorn/ableton-control/pull/6
-- **Status:** open
+- **Status:** closed
 
 ## Decision
 Your blocked report is accepted. Don't narrow the spec: Monitor must show any playing or queued scene, including ones before the first title and title scenes.
