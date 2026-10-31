@@ -12,6 +12,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
   let indexing = null, rawScenes = new Map();
   function sceneDetails(index) {
+    // Live can publish new indexes before the rebuilt scene map arrives.
+    if (indexing && indexing.done < indexing.total) return null;
     const scene = rawScenes.get(index);
     return scene ? {name:scene.name, color:scene.color, loopBeats:scene.loopBeats, beatsPerBar:scene.beatsPerBar} : null;
   }
@@ -22,7 +24,12 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   function onProgress(value) {
     if (!value || !Number.isInteger(value.done) || !Number.isInteger(value.total) ||
         value.done < 0 || value.total < 0 || value.done > value.total) return;
-    indexing = {done:value.done, total:value.total}; broadcast('progress', indexing);
+    const previousPlay = JSON.stringify(play);
+    indexing = {done:value.done, total:value.total};
+    refreshPlay();
+    broadcast('progress', indexing);
+    // Invalidate on scan start and restore on completion, even without onPlay.
+    if (JSON.stringify(play) !== previousPlay) broadcast('play', play);
   }
   bridge.on('progress', onProgress);
   let setJSON = null, mix = parseMix(), mixJSON = null;
@@ -140,8 +147,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         res.writeHead(200, {'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});
         clients.add(res); if (setJSON !== null) send(res, 'set', parsed);
         send(res, 'mix', mix);
-        send(res, 'play', play); if (pos) send(res, 'pos', pos);
         if (transport) send(res, 'transport', transport);
+        send(res, 'play', play); if (pos) send(res, 'pos', pos);
         if (indexing) send(res, 'progress', indexing);
         res.on('close', () => clients.delete(res)); return;
       }

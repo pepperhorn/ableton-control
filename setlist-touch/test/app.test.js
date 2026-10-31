@@ -205,3 +205,46 @@ test('play carries current/next scene details for pre-title, title and normal sc
  bridge.emit('play',{playing:0,fired:1});bridge.emit('scenes',[]);await req(port,'/');
  a.equal(plays().at(-1).current,null);a.equal(plays().at(-1).next,null);
 });
+
+for (const order of ['production', 'fixture']) test(`Monitor suppresses stale scene names through re-index and recovers with ${order} event order`,async t=>{
+ const {port,bridge}=await setup(t);
+ const scenes=['* Song','Intro','Verse','Chorus','Outro'].map((name,index)=>({index,name,color:index+1,loopBeats:16,beatsPerBar:4}));
+ bridge.emit('scenes',scenes);bridge.emit('play',{playing:2,fired:3});
+ const s=stream(port);t.after(()=>s.request.destroy());await s.ready;await req(port,'/');
+ const latest=client=>JSON.parse(client.events.filter(e=>e.startsWith('event: play')).at(-1).split('data: ')[1]);
+ a.equal(latest(s).current.name,'Verse');a.equal(latest(s).next.name,'Chorus');
+ bridge.emit('progress',{done:0,total:6});await req(port,'/');
+ // Invalidate already-published metadata immediately, before Live's next play.
+ a.equal(latest(s).current,null);a.equal(latest(s).next,null);
+ bridge.emit('play',{playing:3,fired:4});
+ bridge.emit('pos',{scene:3,position:4,loopStart:0,loopEnd:16,beatsPerBar:4});await req(port,'/');
+ // These new indexes point at Chorus/Outro in the old map; never publish them.
+ a.equal(latest(s).playing,3);a.equal(latest(s).fired,4);
+ a.equal(latest(s).current,null);a.equal(latest(s).next,null);
+ const mid=stream(port);t.after(()=>mid.request.destroy());await mid.ready;await req(port,'/');
+ a.equal(latest(mid).current,null);a.equal(latest(mid).next,null);
+ const shifted=[{index:0,name:'Count in',color:99,loopBeats:4,beatsPerBar:4},...scenes.map(scene=>({...scene,index:scene.index+1}))];
+ bridge.emit('scenes',shifted);
+ // Production follows completion with play; fixture sends play before completion.
+ if(order==='fixture')bridge.emit('play',{playing:3,fired:4});
+ await req(port,'/');a.equal(latest(s).current,null);a.equal(latest(mid).next,null);
+ bridge.emit('progress',{done:6,total:6});await req(port,'/');
+ // Completion must restore both clients without requiring another play event.
+ for(const client of [s,mid]){
+  a.deepEqual(latest(client).current,{name:'Verse',color:3,loopBeats:16,beatsPerBar:4});
+  a.deepEqual(latest(client).next,{name:'Chorus',color:4,loopBeats:16,beatsPerBar:4});
+ }
+ if(order==='production')bridge.emit('play',{playing:3,fired:4});
+ await req(port,'/');a.equal(latest(s).current.name,'Verse');
+});
+
+test('connect snapshot sends stopped transport before a retained playing scene',async t=>{
+ const {port,bridge}=await setup(t);
+ bridge.emit('transport',{...transportState,is_playing:0});
+ const s=stream(port);t.after(()=>s.request.destroy());await s.ready;await req(port,'/');
+ const transportIndex=s.events.findIndex(e=>e.startsWith('event: transport'));
+ const playIndex=s.events.findIndex(e=>e.startsWith('event: play'));
+ a.ok(transportIndex>=0 && transportIndex<playIndex);
+ a.equal(JSON.parse(s.events[transportIndex].split('data: ')[1]).is_playing,0);
+ a.equal(JSON.parse(s.events[playIndex].split('data: ')[1]).playing,23);
+});

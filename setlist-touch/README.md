@@ -109,3 +109,7 @@ Monitor follows the timing track. Running transport with no tracked scene shows
 “Playing”; stopped transport shows “Stopped”. If an empty timing slot has no stop
 button, Live keeps the previous timing clip running, so Monitor continues to show
 that scene. A lost connection clears the playing scene and shows Reconnecting.
+
+Before using Monitor live, check readability on a phone on a mic stand and queued
+scene pulse timing against Live. Include pale scene colours: the white pulse ring
+may be less visible there, so confirm it is noticeable at arm's length.
