@@ -8,6 +8,7 @@
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-bba88117
 - **PR:** https://github.com/pepperhorn/ableton-control/pull/6 (draft)
 - **Base:** origin/main at abc991a9557d7e672baf02300b6157a983b89d6e merged to obtain the answers document; original dispatch base cb7d989bcbad2ba0f940e04c5561f799fc795c80
+- **Review fixes commit:** 7b3e15e30aeb2a1f6a68d76d5147945e10ec137d (reviewed base 3d646ab7e05bd9b4b4b2e42ebe1e7d21f021f687)
 - **Implementation commit:** f5f37bbc64e00b44e200791bff9f3baf176a80d0 (return documentation committed afterwards)
 - **Port:** 5280
 - **Status:** closed — implementer work done, ready for lead review
@@ -44,17 +45,30 @@ SETLIST_TOUCH_PORT=5280 /home/shaun/.npm/_npx/52027bd8fc0022aa/node_modules/node
 ```
 Node 22.23.4 verification (Node 16 test runs explicitly waived by the answers):
 ```text
-1..145
-# tests 145
+1..148
+# tests 148
 # suites 0
-# pass 145
+# pass 148
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 5698.439766
+# duration_ms 2898.751434
 ```
-Tests cover pre-title/title/normal current and next metadata, null/deleted scenes, pre-title and title renames, connect snapshots, existing SSE set suppression, pure view timing/queue/relaunch/song/transport/disconnection rules and page preference round trips. Existing 136 tests continue to pass.
+Latest verification includes three review regressions described below. Tests cover pre-title/title/normal current and next metadata, null/deleted scenes, pre-title and title renames, connect snapshots, existing SSE set suppression, pure view timing/queue/relaunch/song/transport/disconnection rules and page preference round trips. Existing 136 tests continue to pass.
+
+### Review follow-up (2026-10-31)
+
+Addressed all four findings in the changes-requested review of `3d646ab`:
+
+1. **Blocker — stale scene metadata during re-index:** `sceneDetails()` returns null while valid progress is incomplete. `onProgress()` refreshes play and broadcasts it if changed, both clearing published current/next immediately on scan start and restoring metadata on completion. This covers fresh Live indexes arriving while the old raw scene map is retained. Existing play indexes/song ID semantics are unchanged; Monitor falls back to its neutral state and indexing banner.
+2. **Reconnect flash after stop:** connect snapshots now publish known transport before play, so stopped transport is already available before retained scene metadata can be rendered.
+3. **Faint fill:** `.monitor-fill` now uses `rgba(0,0,0,.28)`, matching Scenes.
+4. **Pale-colour pulse visibility:** added this explicitly to the user's Live checks here and in the Monitor README. The ring design stays unchanged pending physical evidence; no physical contrast validation is claimed.
+
+Regression tests in `test/app.test.js` failed before the fix and pass after it. They cover both production (`scenes → complete progress → play`) and fixture (`scenes → play → complete progress`) event orders, immediate invalidation on progress start, shifted playing/fired indexes, matching-index position updates, connect snapshots mid-index and restoration on final progress without another play. A separate regression requires stopped transport to precede retained play in the connect snapshot. Full suite: 148 passed, 0 failed on Node 22.23.4. `git diff --check` passes. No finding was left unaddressed; finding 4 is the requested physical-check follow-up, rather than an unverified visual redesign.
+
+Browser checks below are evidence from the original implementation, not a new browser run for this review revision. This revision is covered by the server regressions and the full suite; the only visual code change matches the existing Scenes fill opacity.
 
 ### Browser check results
 Automated browser against unchanged dev.js fixture on port 5280:
@@ -101,5 +115,5 @@ For lead acknowledgement through the main-checkout ledger; implementer did not e
 - **What changed:** complete read-only Monitor and the approved bounded play metadata addition.
 - **Decisions made:** listed above; no further scope expansion or ADR proposed.
 - **Out-of-scope issues found:** none remaining after the approved answers resolved the data gap.
-- **Follow-ups:** lead cross-family review and merge. User checks real-phone readability on a mic stand and flash timing against real queued scenes in Live. The known empty timing slot/no stop button limitation remains as specified. Plain HTTP LAN/tailnet does not supply Wake Lock's secure context.
+- **Follow-ups:** lead cross-family review and merge. User checks real-phone readability on a mic stand and flash timing against real queued scenes in Live, including whether the white pulse ring is noticeable on pale scene colours at arm's length. The known empty timing slot/no stop button limitation remains as specified. Plain HTTP LAN/tailnet does not supply Wake Lock's secure context.
 - **For GBrain (lead to promote):** Monitor can cover scenes outside parsed song rows with just current/next scene metadata in play; refresh these on raw scene changes even if parsed set JSON is identical. Browser fixture evidence does not certify real-phone/Ableton timing or OS Wake Lock behaviour.
