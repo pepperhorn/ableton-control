@@ -1,6 +1,6 @@
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path');
-const {normalizeAccess, validMembers, sign, identify, can, meFor, newMember, checkAdminPassword} = require('./access');
+const {adminToken, normalizeAccess, validMembers, sign, identify, can, meFor, newMember, checkAdminPassword} = require('./access');
 const {parseSet} = require('./parse-set');
 const {progress} = require('./progress');
 const {parseMix} = require('./parse-mix');
@@ -164,7 +164,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         loginAttempts.set(remoteAddress,now);
         let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
         if (!checkAdminPassword((value || {}).password,cfg)) return reply(res,403,'Incorrect admin password');
-        cookie({kind:'admin'}); return reply(res,204);
+        cookie(adminToken(cfg)); return reply(res,204);
       }
       if (route === '/api/members') {
         // Open access is not authority to administer the band from a phone.
@@ -182,7 +182,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
           if (changing) return reply(res,409,'Settings are being changed');
           changing = true;
           try {
-            const next = {...cfg,members,accessEnabled:cfg.accessEnabled || members.length > 0};
+            const next = {...cfg,members,accessEnabled:cfg.accessEnabled || (cfg.members.length === 0 && members.length > 0)};
             await saveConfig(next); cfg = next; broadcast('access',null); return json(res,meFor(identityOf(),cfg));
           } finally { changing = false; }
         }
@@ -211,9 +211,10 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         bridge.fire(value.sceneIndex, value.name); return reply(res, 204);
       }
       if (route === '/api/send' && req.method === 'POST') {
+        if (identity.kind === 'none' || identity.kind === 'member' && !identity.member.mixes.length) return reply(res,403,'Mix not allowed');
         let value; try { value = await body(req); } catch (_) { return reply(res, 400, 'Invalid JSON'); }
         const ret = value && mix.returns.find(r => r.returnIndex === value.returnIndex);
-        if (!can(identity,'send',ret && ret.name)) return reply(res,403,'Mix not allowed');
+        if (ret && !can(identity,'send',ret.name)) return reply(res,403,'Mix not allowed');
         if (!value || !Number.isInteger(value.trackIndex) || !Number.isInteger(value.returnIndex) ||
             typeof value.rawName !== 'string' || typeof value.returnName !== 'string' ||
             typeof value.value !== 'number' || !Number.isFinite(value.value) || value.value < 0 || value.value > 1)

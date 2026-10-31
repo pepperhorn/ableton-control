@@ -30,7 +30,41 @@ test('legacy and damaged access fields preserve base credentials and persist gen
   fs.writeFileSync(file,JSON.stringify({...base,...fields,adminPassword:42}));const loaded=loadConfig(file);
   for(const k of Object.keys(base))a.equal(loaded[k],base[k]);
   a.equal(loaded.accessEnabled,Object.keys(fields).length>0);a.deepEqual(loaded.members,[]);a.equal(loaded.adminPassword,'');
-  a.match(loaded.secret,/^[a-f0-9]{64}$/);a.equal(loadConfig(file).secret,loaded.secret);
-  a.equal(fs.statSync(file).mode & 0o777,0o600);
+  a.match(loaded.secret,/^[a-f0-9]{64}$/);
+  if(!Object.keys(fields).length){a.equal(loadConfig(file).secret,loaded.secret);a.equal(fs.statSync(file).mode & 0o777,0o600);}else a.deepEqual(JSON.parse(fs.readFileSync(file)).members,fields.members);
  }
+});
+
+test('damaged config bytes survive load and fallback access stays restricted',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'damaged-access-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'config.json');
+ for(const bytes of ['{"password":"keep",',JSON.stringify({port:99999,username:'band',password:'keep',accessEnabled:true,members:[]}),JSON.stringify({port:8765,username:'band',password:'keep',accessEnabled:true,members:'damaged'})]){
+  fs.writeFileSync(file,bytes);const cfg=loadConfig(file);
+  a.equal(fs.readFileSync(file,'utf8'),bytes);a.equal(cfg.accessEnabled,true);a.deepEqual(cfg.members,[]);
+  a.equal(identify({trusted:true,cookie:'st_id=broken'},cfg).kind,'admin');
+ }
+});
+test('legacy migration adds only the secret, preserving all original fields',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'legacy-access-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'config.json');
+ const original={username:'band',password:'keep',custom:{keep:true}};
+ fs.writeFileSync(file,JSON.stringify(original));const cfg=loadConfig(file);a.deepEqual(JSON.parse(fs.readFileSync(file)),{...original,secret:cfg.secret});
+});
+test('EACCES while persisting a legacy secret cannot stop the laptop server',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'readonly-access-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'config.json');
+ const original={port:8765,username:'band',password:'keep'};
+ fs.writeFileSync(file,JSON.stringify(original));const write=fs.writeFileSync;
+ fs.writeFileSync=(target,...args)=>{if(target===file+'.tmp')throw Object.assign(new Error('read-only'),{code:'EACCES'});return write(target,...args);};
+ let loaded;try { a.doesNotThrow(()=>{loaded=loadConfig(file);}); } finally {fs.writeFileSync=write;}
+ a.match(loaded.secret,/^[a-f0-9]{64}$/);a.equal(loaded.password,'keep');a.equal(identify({trusted:true},loaded).kind,'admin');a.deepEqual(JSON.parse(fs.readFileSync(file)),original);
+ const {createApp}=require('../device/lib/app'),{EventEmitter}=require('events');
+ const app=createApp({bridge:new EventEmitter(),config:loaded});t.after(()=>app.close());
+ a.ok(await app.listen(0)>0);
+});
+test('admin tokens expire and password rotation invalidates them without exposing a password hash',()=>{
+ const {adminToken}=require('../device/lib/access');const payload=adminToken(cfg),token=sign(payload,cfg.secret);
+ const resolve=(token,c=cfg)=>identify({cookie:'st_id='+token},c);
+ a.equal(resolve(token).kind,'admin');a.equal(resolve(token,{...cfg,adminPassword:'new-password'}).kind,'none');
+ a.equal(resolve(token,{...cfg,adminPassword:'new-password',accessEnabled:false}).kind,'open');
+ for(const exp of [Date.now()-1,0,undefined,'forever'])a.equal(resolve(sign({...payload,exp},cfg.secret)).kind,'none');
+ a.equal(resolve(sign({kind:'admin'},cfg.secret)).kind,'none');
+ a.notEqual(payload.v,require('crypto').createHash('sha256').update(cfg.adminPassword).digest('hex'));
 });

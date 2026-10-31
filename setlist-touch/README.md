@@ -134,3 +134,9 @@ connected screens automatically, including revoked pages and removed members.
 Before gig use, verify in Live/Windows that the jweb laptop window retains admin
 control and that phones remember their names after a browser restart. Fixture
 browser checks cannot verify those device behaviors.
+
+Changing the admin password revokes existing phone admin sessions. Admin cookies
+expire after a year on the server as well as in the browser. Damaged config files
+are preserved for repair and fall back to restricted phone access. If the config
+cannot be written, the laptop still starts with an in-memory signing secret;
+phone identities may need to be selected again after restarting.

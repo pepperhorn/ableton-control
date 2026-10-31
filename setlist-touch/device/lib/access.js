@@ -27,11 +27,14 @@ function verify(token, secret) {
     return JSON.parse(Buffer.from(data,'base64url').toString());
   } catch (_) { return null; }
 }
+function adminVersion(cfg) { return crypto.createHmac('sha256',cfg.secret).update('admin-password\0').update(cfg.adminPassword).digest('hex'); }
+function adminToken(cfg) { return {kind:'admin',v:adminVersion(cfg),exp:Date.now() + 31536000000}; }
 function identify({trusted, cookie}, cfg) {
   if (trusted) return {kind:'admin'};
   const token = (cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('st_id='));
   const payload = verify(token && token.slice(6),cfg.secret);
-  if (payload && payload.kind === 'admin' && cfg.adminPassword) return {kind:'admin'};
+  if (payload && payload.kind === 'admin' && cfg.adminPassword && typeof payload.v === 'string' &&
+      Number.isSafeInteger(payload.exp) && payload.exp > Date.now() && equal(payload.v,adminVersion(cfg))) return {kind:'admin'};
   if (cfg.accessEnabled === false) return {kind:'open'};
   const member = payload && payload.kind === 'member' && cfg.members.find(m => m.id === payload.memberId);
   return member ? {kind:'member',member} : {kind:'none'};
@@ -53,4 +56,4 @@ function newMember(name, returnNames) {
   return {id:crypto.randomBytes(16).toString('hex'),name,pages:['monitor'],mixes:returnNames.filter(r => r.toLowerCase() === name.toLowerCase())};
 }
 function checkAdminPassword(given, cfg) { return !!cfg.adminPassword && typeof given === 'string' && equal(given,cfg.adminPassword); }
-module.exports = {validMembers,normalizeAccess,sign,verify,identify,can,meFor,newMember,checkAdminPassword};
+module.exports = {adminToken,validMembers,normalizeAccess,sign,verify,identify,can,meFor,newMember,checkAdminPassword};

@@ -7,7 +7,7 @@ import {render, updatePlayback, fitSceneRows} from './render.js';
 const $ = selector => document.querySelector(selector);
 const local = ['localhost','127.0.0.1','[::1]','::1'].includes(location.hostname);
 let me = {kind:local ? 'admin' : 'none',accessEnabled:!local,pages:local ? ['monitor','scenes','transport'] : ['monitor'],mixes:local ? 'all' : [],members:[],adminAvailable:false};
-let accessReady = local, accessLoaded = false;
+let accessReady = local, accessLoaded = false, accessSequence = 0, accessSettingDirty = false;
 // Load the access interface independently; the laptop remains usable if it fails.
 let allowedPages = () => local ? ['scenes','mix','monitor'] : ['monitor'];
 let pageFor = page => allowedPages().includes(page) ? page : allowedPages()[0];
@@ -37,12 +37,20 @@ Promise.all([import('./access-view.js'),import('./access-render.js')]).then(([vi
   return refreshMe();
 }).catch(() => status('Could not load member access. Reload to retry.'));
 async function refreshMe() {
+  const sequence = ++accessSequence;
   if (!accessLoaded) { const view = await import('./access-view.js'); ({allowedPages,pageFor,allowedTabs} = view); accessLoaded = true; }
   const res = await fetch('/api/me'); if (!res.ok) throw new Error('Could not load access');
-  me = await res.json(); accessReady = true; cancelGestures();
-  state = {...state,page:pageFor(state.page,me)};
-  mixState = reduceMix(mixState,{type:'mix'},visibleMix());
-  savePrefs(); mixUI.render(); shell(); accessUI.render();
+  const next = await res.json();
+  if (sequence !== accessSequence) return;
+  const before = JSON.stringify({pages:me.pages,mixes:me.mixes});
+  const oldPage = state.page, oldTab = mixState.tab;
+  me = next; accessReady = true;
+  state = {...state,page:pageFor(state.page,me,mixSnapshot ? mix : null)};
+  if (mixSnapshot) mixState = reduceMix(mixState,{type:'mix'},visibleMix());
+  const changed = before !== JSON.stringify({pages:me.pages,mixes:me.mixes}) || oldPage !== state.page || oldTab !== mixState.tab;
+  if (changed) { cancelGestures(); mixUI.render(); }
+  if (local && !accessSettingDirty) $('.settings-form').elements.accessEnabled.checked = me.accessEnabled;
+  savePrefs(); shell(); accessUI.render();
 }
 const mixUI = createMixRenderer({
   stateOf:() => ({...state,connected:transport && mixSnapshot && accessReady && location.hash !== '#admin'}), mixOf:visibleMix, viewOf:() => ({...mixState,page:state.page}),
@@ -55,8 +63,8 @@ const transportUI = createTransportRenderer({
 function savePrefs() { try { localStorage.setItem('setlist-touch',JSON.stringify(prefsOf(state,{...mixState,page:state.page}))); } catch (_) {} }
 function shell() {
   const settingsOpen = location.hash === '#settings' && local || location.hash === '#admin';
-  if (accessReady) state = {...state,page:pageFor(state.page,me)};
-  for (const button of document.querySelectorAll('.page-choice')) button.hidden = !allowedPages(me).includes(button.dataset.page);
+  if (accessReady) state = {...state,page:pageFor(state.page,me,mixSnapshot ? mix : null)};
+  for (const button of document.querySelectorAll('.page-choice')) button.hidden = !allowedPages(me,mixSnapshot ? mix : null).includes(button.dataset.page);
   document.body.dataset.page = state.page;
   $('.setlist-main').hidden = settingsOpen || state.page !== 'scenes';
   $('.mix-panel').hidden = settingsOpen || state.page !== 'mix';
@@ -64,7 +72,7 @@ function shell() {
   $('.monitor-page').hidden = settingsOpen || state.page !== 'monitor';
   $('.transport-bar').hidden = settingsOpen || !transportEnabled || !me.pages.includes('transport') || state.page === 'monitor';
   syncMonitor(!settingsOpen && state.page === 'monitor');
-  const ready = state.page === 'monitor' ? playSnapshot : state.page === 'mix' ? mixSnapshot && mix.returns.length > 0 : snapshot;
+  const ready = state.page === 'monitor' ? playSnapshot : state.page === 'mix' ? mixSnapshot && visibleMix().returns.length > 0 : snapshot;
   const indexing = transport && indexProgress && indexProgress.done < indexProgress.total;
   $('.connection-bar').hidden = transport && ready && !indexing;
   $('.connection-label').hidden = !!indexing;
@@ -82,15 +90,16 @@ function shell() {
 function dispatchMix(action) {
   cancelGestures();
   // Page preference belongs to the shell; the existing mix reducer owns mix tabs.
-  if (action.type === 'page') state = {...state, page:pageFor(pageOf(action.page),me)};
+  if (action.type === 'page') state = {...state, page:pageFor(pageOf(action.page),me,mixSnapshot ? mix : null)};
   mixState = reduceMix(mixState,action,visibleMix()); savePrefs(); mixUI.render(); shell();
 }
 function acceptMix(next) {
   mixSnapshot = true;
   const serialized = JSON.stringify(next);
   if (serialized === mixJSON) { shell(); return; }
-  mix = next; mixJSON = serialized; mixState = reduceMix(mixState,{type:'mix'},visibleMix());
-  savePrefs(); mixUI.render(); shell();
+  mix = next; mixJSON = serialized;
+  if (accessReady) { mixState = reduceMix(mixState,{type:'mix'},visibleMix()); savePrefs(); }
+  mixUI.render(); shell();
 }
 function cancelGestures() { for (const id of pointers) detector.move(id, Infinity, Infinity); mixUI.cancel(); transportUI.cancel(); }
 function dispatch(action) {
@@ -110,7 +119,7 @@ $('.now-playing-banner').addEventListener('click',()=>dispatch({type:'showPlayin
 let statusTimer;
 function status(text) { clearTimeout(statusTimer); $('.launch-status').textContent = text; statusTimer = setTimeout(()=>$('.launch-status').textContent='',3500); }
 async function launch(row) {
-  if (!accessReady || !allowedPages(me).includes('scenes') || location.hash === '#admin' || state.page !== 'scenes' || !canLaunch(state) || !row.isConnected) return;
+  if (!accessReady || !allowedPages(me,mixSnapshot ? mix : null).includes('scenes') || location.hash === '#admin' || state.page !== 'scenes' || !canLaunch(state) || !row.isConnected) return;
   try {
     const res = await fetch('/api/fire',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sceneIndex:Number(row.dataset.sceneIndex),name:row.dataset.name})});
     if (res.status === 409) { row.classList.add('is-stale'); setTimeout(()=>row.classList.remove('is-stale'),1000); status('Set changed. Check the row and tap again.'); }
@@ -172,14 +181,15 @@ async function settings() {
   const show=location.hash==='#settings'&&local;
   cancelGestures();$('.settings-panel').hidden=!show;$('.setlist-header').hidden=show;shell();accessUI.render();
   if(!show)return;
-  try {const res=await fetch('/api/config');if(!res.ok)throw new Error();const cfg=await res.json();for(const name of ['port','username'])$('.settings-form').elements[name].value=cfg[name];const password=$('.settings-form').elements.password;password.value='';$('.settings-form').elements.accessEnabled.checked=cfg.accessEnabled;password.placeholder=cfg.hasPassword?'Password set — leave blank to keep':'Set a password';}
+  try {const res=await fetch('/api/config');if(!res.ok)throw new Error();const cfg=await res.json();for(const name of ['port','username'])$('.settings-form').elements[name].value=cfg[name];const password=$('.settings-form').elements.password;password.value='';accessSettingDirty=false;$('.settings-form').elements.accessEnabled.checked=!!cfg.accessEnabled;password.placeholder=cfg.hasPassword?'Password set — leave blank to keep':'Set a password';}
   catch(_){$('.settings-status').textContent='Could not load settings.';}
 }
+$('.settings-form').addEventListener('change',e=>{if(e.target.name==='accessEnabled')accessSettingDirty=true;});
 window.addEventListener('hashchange',settings);settings();
 $('.settings-form').addEventListener('submit',async e=>{
-  e.preventDefault();const form=e.currentTarget;const cfg={port:Number(form.elements.port.value),username:form.elements.username.value,password:form.elements.password.value,adminPassword:form.elements.adminPassword.value,accessEnabled:form.elements.accessEnabled.checked};
+  e.preventDefault();const form=e.currentTarget;const cfg={port:Number(form.elements.port.value),username:form.elements.username.value,password:form.elements.password.value,adminPassword:form.elements.adminPassword.value,...(accessSettingDirty ? {accessEnabled:form.elements.accessEnabled.checked} : {})};
   const button=$('.settings-save');button.disabled=true;
-  try {const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});if(!res.ok)throw new Error(await res.text());$('.settings-status').textContent='Saved.';if(cfg.port!==Number(location.port||80))location.href=`http://${location.hostname}:${cfg.port}/${location.search}#settings`;}
+  try {const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});if(!res.ok)throw new Error(await res.text());accessSettingDirty=false;$('.settings-status').textContent='Saved.';if(cfg.port!==Number(location.port||80))location.href=`http://${location.hostname}:${cfg.port}/${location.search}#settings`;}
   catch(error){$('.settings-status').textContent=error.message||'Could not save settings.';}
   finally{button.disabled=false;}
 });
