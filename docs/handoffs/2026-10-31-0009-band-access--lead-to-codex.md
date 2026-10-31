@@ -47,5 +47,7 @@ None.
 ---
 ## Receiver ack
 
+Acked 2026-10-31 (Codex). I will implement T1 → T2 → T3 in the owned files only: fail-closed identity/config, server-enforced permissions, and live-updating picker/admin UI. Loopback remains admin and existing access-off behavior stays intact. I will test, browser-check both viewports, and return a committed handoff plus draft PR. No open questions. GBrain search returned no relevant project page.
+
 ---
 ## Return (implementer → lead; fill in when done, or in a separate …-to-lead.md)
