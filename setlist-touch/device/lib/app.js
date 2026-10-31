@@ -9,6 +9,7 @@ const {authorize, isTrustedLoopback} = require('./auth');
 const {loadConfig, saveConfig: persist, validConfig} = require('./config');
 function createApp({bridge, config = loadConfig(), saveConfig = persist,
   webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
+  const configWarning = config.configWarning;
   let cfg = normalizeAccess(config), parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
   const loginAttempts = new Map();
@@ -130,7 +131,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     res.writeHead(status, {'Content-Type':type, 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'}); res.end(body);
   }
   function json(res, data) { reply(res, 200, JSON.stringify(data), 'application/json'); }
-  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password, ...(cfg.accessEnabled || cfg.adminPassword || cfg.members.length ? {hasAdminPassword:!!cfg.adminPassword,accessEnabled:cfg.accessEnabled} : {})}; }
+  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password, ...(configWarning ? {configWarning} : {}), ...(cfg.accessEnabled || cfg.adminPassword || cfg.members.length ? {hasAdminPassword:!!cfg.adminPassword,accessEnabled:cfg.accessEnabled} : {})}; }
   async function body(req) {
     if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) throw new Error('Expected JSON');
     let text = '';

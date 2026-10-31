@@ -349,3 +349,14 @@ test('send refuses anonymous malformed JSON before parsing but returns a stale m
  const stale=await req(port,'/api/send',{...sendBody(0.5),returnIndex:999},player);a.equal(stale.status,409);a.ok(JSON.parse(stale.data).mix);
  a.equal((await req(port,'/api/send',{...sendBody(0.5),returnIndex:3,returnName:'Shaun'},player)).status,403);
 });
+
+test('laptop settings report damaged config and a password save retains its recovery copy',async t=>{
+ const fs=require('fs'),os=require('os'),{loadConfig,saveConfig}=require('../device/lib/config');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'damaged-settings-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'config.json');
+ const bytes='{"password":"keep-original","members":[';fs.writeFileSync(file,bytes);
+ const config=loadConfig(file),app=createApp({bridge:new EventEmitter(),config,saveConfig:cfg=>saveConfig(cfg,file)});t.after(()=>app.close());const port=await app.listen(0);
+ const before=JSON.parse((await req(port,'/api/config')).data);a.deepEqual(before.configWarning,{backupAvailable:true});
+ a.equal((await req(port,'/api/config',{port:config.port,username:'band',password:'replacement'})).status,200);
+ a.equal(fs.readFileSync(file+'.damaged','utf8'),bytes);a.equal(JSON.parse(fs.readFileSync(file)).accessEnabled,true);
+ a.deepEqual(JSON.parse((await req(port,'/api/config')).data).configWarning,{backupAvailable:true});
+});

@@ -72,3 +72,4 @@ body[data-page=monitor] .page-switch{margin-right:auto}
 .admin-orphan { color:#ffc479; }
 .admin-add-form,.admin-login-form { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0; }
 .admin-label { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.settings-config-warning { padding:12px; border:1px solid #b8873d; border-radius:8px; background:#382d1e; color:#ffe0ad; font-size:14px; }

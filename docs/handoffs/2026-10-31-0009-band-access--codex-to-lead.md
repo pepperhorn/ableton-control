@@ -44,15 +44,15 @@ HOME=/tmp/0009-home SETLIST_TOUCH_PORT=5290 /home/shaun/.nvm/versions/node/v22.2
 - **What changed:** HMAC identity cookies, constant-time password checks, independently validated access config, long-lived HttpOnly cookies, per-address admin-login rate limit, laptop-only settings merge, member administration, immediate permission refresh, and default name/mix permissions. Pending sends recheck permission using the latest sender's identity.
 - **Verification output:**
 ```text
-1..170
-# tests 170
+1..179
+# tests 179
 # suites 0
-# pass 170
+# pass 179
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-Node v16.20.2: token expiry/rotation and app/config load passed
+Node v16.20.2: damaged-config backup/warning and app load passed
 ```
 `git diff --check` passed. `git diff --name-only main...HEAD` contains only owned files plus the task handoffs.
 - **Browser checks (initial implementation, before R1; not repeated during R1):** shared preview browser, desktop 1280×800 and mobile 390×844. Access off showed all three page choices and no picker; laptop admin UI added Shaun with Monitor and matching Shaun mix. Separate incognito context used 127.0.0.2 (Host deliberately outside trusted loopback) and shared Basic auth, chose Shaun, and showed only My mix/Monitor and the Shaun return; transport remained hidden with `?transport=1`; direct blocked `/api/fire` returned 403. Laptop enabled Scenes and it appeared live without reload; selected Scenes on the phone, then revoked Scenes/mix, and it moved live to Monitor. Removing the last member returned the phone to an empty picker with Monitor. Separate admin-password sign-in on the phone opened Admin with all pages. Both viewports had no horizontal overflow. Tabs opened for checks were closed. Initial preview navigation preceded server startup and returned connection refused; retry succeeded. Credential-bearing navigation was used only to seed synthetic Basic auth, followed by navigation without URL credentials.
@@ -98,3 +98,41 @@ Addressed the review of `15d7dd60dc555c6fef0226390231c198098120a2`: all four blo
 - An unwritable config leaves the signing secret in memory; cookies may need re-selection after restart. Config corruption remains on disk for repair, with access on in memory. A deliberate laptop settings save can still persist repairs.
 - Admin tokens issued before this correction intentionally require a fresh sign-in. Member identities are unchanged.
 - Lead: request a new cross-family review of the pushed head. Windows/Ableton jweb, actual phone restart persistence, and live/touch acceptance remain the user-only gates from the original handoff.
+
+
+## PR #7 review R2 corrections — 2026-10-31
+
+Addressed the round-two review of `792bea58549b39dbc030b67234abaf50cb184129`. No findings deferred; round-one fixes remain in place.
+
+### Restart regression
+
+An empty return snapshot now means waiting for Live, rather than evidence that a member's mix is orphaned. `allowedPages` filters mix permissions against current returns only when the snapshot contains returns. A member on My mix stays there through server reconnect/open, an empty mix snapshot, identity refresh and the later populated snapshot; the waiting bar clears when the allowed return arrives. Populated snapshots with only orphaned permissions still move to the first allowed page.
+
+Regression: `access-view.test.mjs` executes the real shell, reconnect event and real reducers, asserting both page and last stored page remain `mix` throughout, with the waiting bar visible until real returns arrive.
+
+### Damaged config recovery
+
+- Config load attempts an exclusive, one-time copy to `config.json.damaged` for parse/base/access-field corruption. An existing recovery copy is never overwritten. Copy errors do not stop startup.
+- Runtime warning metadata records whether a recovery copy is available. It is returned only through laptop-only `/api/config` and is not saved as config data or sent in member snapshots.
+- Laptop Settings shows an alert before the form: members and passwords may be missing, whether the recovery copy exists, and how to repair/recover before saving. If copying failed, it explicitly asks the user to make a safe copy before a save replaces the damaged contents. The warning remains for that server session after a settings save because defaults were used at startup.
+- Tests cover backup byte fidelity, repeat-load non-overwrite, preservation after a password save, access-field corruption, backup EACCES, warning-present/backup-failed UI text, normal warning-hidden UI, and real load → laptop config API → password save → original recovery-copy preservation. README documents this recovery flow.
+- No change to Max scripts was needed; the requested warning is on laptop Settings within the owned files.
+
+### Three previously untested fixes
+
+Added shell-harness tests for each omitted path:
+
+1. Identity resolves **before** the mix snapshot: Keith remains selected/stored until the later mix arrives (`if (mixSnapshot)` in refresh).
+2. Only `acceptMix → shell` runs after a populated snapshot renames the allowed return: the page leaves Mix, without an identity refresh (`pageFor` receives current mix in shell).
+3. While waiting for identity, an unfiltered snapshot has returns but no permitted return is resolved: the connection bar remains visible until identity supplies the matching return (filtered `ready`).
+
+Verified these tests independently by reverting each corresponding line in isolated temporary copies: **each reversion fails its intended shell test**. Reverting the empty-snapshot guard also fails the restart regression. No implementation checkout was reverted for these comparisons.
+
+### R2 verification and remaining gates
+
+- Full `PATH=/home/shaun/.nvm/versions/node/v22.22.1/bin:$PATH npm test` from `setlist-touch`: **179 pass, 0 fail**.
+- `git diff --check`: passed; all modified files are in the task's owned scope, including this return handoff.
+- Node 16.20.2 smoke: damaged-config backup/warning plus app loading passed. Full tests use Node 22 for existing `t.after` support.
+- No new browser or physical-device proof claimed. Client behavior is exercised through the real app shell with controlled event/network ordering; recovery is also tested against real temporary files and HTTP settings saves.
+- GBrain search again returned no relevant project page; no implementer write-back.
+- Lead: request a fresh cross-family review of the pushed head. Windows/Ableton jweb, actual phone restart persistence and live/touch acceptance remain the user-only gates.

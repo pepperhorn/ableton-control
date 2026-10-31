@@ -26,12 +26,25 @@ function loadConfig(file = configPath()) {
     // Persistence failure must not prevent the laptop from starting.
     try { writeConfig({...(missing ? raw : original), secret:cfg.secret}, file); } catch (_) {}
   }
+  let configWarning = null;
+  if (damaged || !accessValid) {
+    let backupAvailable = false;
+    try {
+      fs.copyFileSync(file, file + '.damaged', fs.constants.COPYFILE_EXCL);
+      backupAvailable = true;
+    } catch (_) {
+      try { backupAvailable = fs.statSync(file + '.damaged').isFile(); } catch (_) {}
+    }
+    configWarning = {backupAvailable};
+    Object.defineProperty(cfg, 'configWarning', {value:configWarning});
+  }
   // Preserve the enumerable shape of legacy configs for existing consumers.
   // Access fields remain readable and are persisted through toJSON on save.
   if (raw.accessEnabled === undefined && raw.members === undefined) {
     const legacy = {...raw};
     for (const key of ['accessEnabled','members','adminPassword','secret']) Object.defineProperty(legacy,key,{value:cfg[key],enumerable:false,writable:true});
     Object.defineProperty(legacy,'toJSON',{value:() => ({...legacy,accessEnabled:legacy.accessEnabled,members:legacy.members,adminPassword:legacy.adminPassword,secret:legacy.secret}),enumerable:false});
+    if (configWarning) Object.defineProperty(legacy,'configWarning',{value:configWarning});
     return legacy;
   }
   return cfg;

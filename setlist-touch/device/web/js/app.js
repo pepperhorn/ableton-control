@@ -181,7 +181,11 @@ async function settings() {
   const show=location.hash==='#settings'&&local;
   cancelGestures();$('.settings-panel').hidden=!show;$('.setlist-header').hidden=show;shell();accessUI.render();
   if(!show)return;
-  try {const res=await fetch('/api/config');if(!res.ok)throw new Error();const cfg=await res.json();for(const name of ['port','username'])$('.settings-form').elements[name].value=cfg[name];const password=$('.settings-form').elements.password;password.value='';accessSettingDirty=false;$('.settings-form').elements.accessEnabled.checked=!!cfg.accessEnabled;password.placeholder=cfg.hasPassword?'Password set — leave blank to keep':'Set a password';}
+  try {const res=await fetch('/api/config');if(!res.ok)throw new Error();const cfg=await res.json();
+    const warning=$('.settings-config-warning');warning.hidden=!cfg.configWarning;
+    warning.textContent=cfg.configWarning ? 'Damaged config.json detected at startup. Current settings may be missing members and passwords. ' +
+      (cfg.configWarning.backupAvailable ? 'A recovery copy is kept in config.json.damaged. Repair the original file before saving, or restore missing settings from the copy.' : 'Could not create a recovery copy. Copy config.json somewhere safe and repair it before saving; saving replaces its damaged contents.') : '';
+    for(const name of ['port','username'])$('.settings-form').elements[name].value=cfg[name];const password=$('.settings-form').elements.password;password.value='';accessSettingDirty=false;$('.settings-form').elements.accessEnabled.checked=!!cfg.accessEnabled;password.placeholder=cfg.hasPassword?'Password set — leave blank to keep':'Set a password';}
   catch(_){$('.settings-status').textContent='Could not load settings.';}
 }
 $('.settings-form').addEventListener('change',e=>{if(e.target.name==='accessEnabled')accessSettingDirty=true;});

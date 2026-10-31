@@ -68,3 +68,21 @@ test('admin tokens expire and password rotation invalidates them without exposin
  a.equal(resolve(sign({kind:'admin'},cfg.secret)).kind,'none');
  a.notEqual(payload.v,require('crypto').createHash('sha256').update(cfg.adminPassword).digest('hex'));
 });
+
+test('damaged config gets one recovery copy which survives later loads and settings saves',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'backup-access-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'config.json');
+ const bytes='{"password":"original-band","members":[{"name":"Keep me"}],';fs.writeFileSync(file,bytes);
+ const first=loadConfig(file);a.deepEqual(first.configWarning,{backupAvailable:true});a.equal(fs.readFileSync(file+'.damaged','utf8'),bytes);
+ fs.writeFileSync(file,'another damaged version');loadConfig(file);a.equal(fs.readFileSync(file+'.damaged','utf8'),bytes);
+ require('../device/lib/config').saveConfig({...normalizeAccess(first),password:'replacement'},file);
+ a.equal(fs.readFileSync(file+'.damaged','utf8'),bytes);a.equal(JSON.parse(fs.readFileSync(file)).password,'replacement');
+ a.equal(loadConfig(file).configWarning,undefined);
+});
+test('damaged access fields get backed up and a failed backup never stops config loading',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'backup-failure-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'config.json');
+ const bytes=JSON.stringify({port:8765,username:'band',password:'keep',members:'broken',accessEnabled:true});fs.writeFileSync(file,bytes);
+ const copy=fs.copyFileSync;fs.copyFileSync=()=>{throw Object.assign(new Error('read-only'),{code:'EACCES'});};
+ let loaded;try{a.doesNotThrow(()=>{loaded=loadConfig(file);});}finally{fs.copyFileSync=copy;}
+ a.deepEqual(loaded.configWarning,{backupAvailable:false});a.equal(loaded.password,'keep');a.equal(loaded.accessEnabled,true);a.equal(fs.readFileSync(file,'utf8'),bytes);
+ loaded=loadConfig(file);a.equal(loaded.configWarning.backupAvailable,true);a.equal(fs.readFileSync(file+'.damaged','utf8'),bytes);
+});

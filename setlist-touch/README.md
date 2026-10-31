@@ -137,6 +137,10 @@ browser checks cannot verify those device behaviors.
 
 Changing the admin password revokes existing phone admin sessions. Admin cookies
 expire after a year on the server as well as in the browser. Damaged config files
-are preserved for repair and fall back to restricted phone access. If the config
+are preserved for repair and fall back to restricted phone access. On detecting
+damage, startup also attempts a one-time copy to `config.json.damaged` without
+replacing an existing copy. Laptop Settings warns that members/passwords may be
+missing and reports whether a recovery copy is available. Repair or recover the
+file before saving settings; a save replaces the active damaged contents. If the config
 cannot be written, the laptop still starts with an in-memory signing secret;
 phone identities may need to be selected again after restarting.
