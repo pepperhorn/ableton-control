@@ -6,7 +6,7 @@
 - **Dispatch:** [lead → codex](2026-10-31-0009-band-access--lead-to-codex.md)
 - **Branch:** orch/0009-band-access
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-2098f564
-- **PR:** draft creation follows this commit; branch orch/0009-band-access → main
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/7 (draft; orch/0009-band-access → main)
 - **Base commit:** 15ff7f966193bc1e4d6327041fbb2091bf4a8d6c
 - **Implementation commit:** 37cf7c68ed52b39140f186ed1597507b1d9777fa
 - **Port:** 5290, isolated fixture HOME=/tmp/0009-home
@@ -30,7 +30,7 @@ Read the linked spec, plan and dispatch. No Live/Max/device build changes were n
 - [x] Trusted loopback keeps admin despite corrupt cookies/access fields.
 - [x] Full npm test passes; built-ins only; Node 16 runtime smoke passes.
 - [x] Browser checks recorded below.
-- [x] Return handoff committed; push and draft PR follow this commit.
+- [x] Return handoff committed; branch pushed and draft PR #7 opened.
 
 ## Verify with
 ```bash
