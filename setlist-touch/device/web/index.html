@@ -31,6 +31,10 @@
 <span class="transport-readout"><span class="transport-tempo-label">BPM</span> <span class="transport-tempo">—</span></span>
 <span class="transport-position" aria-label="Song position">—</span>
 </section>
+<div class="access-controls"><button class="change-name" type="button" hidden>Change name</button><a class="access-admin-link" href="#admin" hidden>Admin</a></div>
+<section class="name-picker" hidden><h2 class="name-heading">Choose your name</h2><div class="name-choices"></div><a class="name-admin" href="#admin" hidden>Admin</a><p class="name-hint">Monitor is available while you choose.</p></section>
+<section class="admin-login" hidden><a class="admin-back" href="#">Back</a><h2 class="admin-heading">Admin sign-in</h2><form class="admin-login-form"><label class="admin-label">Admin password <input class="admin-password" name="password" type="password" autocomplete="current-password" required></label><button class="admin-sign-in" type="submit">Sign in</button></form></section>
+<section class="admin-page" hidden><a class="admin-back" href="#">Back</a><h2 class="admin-heading">Band members and access</h2><div class="admin-members"></div><form class="admin-add-form"><label class="admin-label">New member <input class="admin-new-name" name="name" maxlength="200" required></label><button class="admin-add" type="submit">Add member</button></form><button class="admin-save" type="button">Save members</button></section>
 <main class="setlist-main">
 <aside class="setlist-sidebar" id="setlist-sidebar" aria-label="Setlist">
 <div class="filter-pills" aria-label="Categories"></div><nav class="setlist-songs" aria-label="Songs"></nav>
@@ -55,11 +59,14 @@
 <section class="settings-panel" hidden>
 <a class="settings-back" href="#">◀ Back to setlist</a><h2 class="settings-heading">Settings</h2>
 <a class="touch-test-link" href="/touch-test.html">Touch diagnostic</a>
+<p class="settings-config-warning" role="alert" hidden></p>
 <form class="settings-form">
 <label class="settings-label" for="port">Port</label><input class="settings-input" id="port" name="port" type="number" min="1" max="65535" required>
 <label class="settings-label" for="username">Username</label><input class="settings-input" id="username" name="username" autocomplete="username" required>
 <label class="settings-label" for="password">Password</label><input class="settings-input" id="password" name="password" type="password" autocomplete="new-password">
 <p class="settings-hint">Set a password to allow phones and other computers. LAN connections use plain HTTP. Use Tailscale for an encrypted connection.</p>
+<label class="settings-label" for="adminPassword">Admin password</label><input class="settings-input" id="adminPassword" name="adminPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep">
+<label class="settings-label"><input class="settings-access" name="accessEnabled" type="checkbox"> Enable member access restrictions</label>
 <button class="settings-save" type="submit">Save settings</button><p class="settings-status" role="status"></p>
 </form></section>
 <div class="launch-status" role="status" aria-live="polite"></div>

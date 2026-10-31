@@ -56,3 +56,20 @@ body[data-page=monitor] .page-switch{margin-right:auto}
 @media(max-width:600px){.monitor-page{padding:16px;gap:16px}.monitor-current,.monitor-next{padding:24px;min-height:150px}.monitor-scene-name{font-size:36px}.monitor-next .monitor-scene-name{font-size:30px}}
 @media(max-height:500px) and (min-width:601px){.monitor-page{display:grid;grid-template-columns:1.4fr 1fr;grid-template-rows:auto 1fr;padding:16px;gap:12px}.monitor-song{grid-column:1/-1;font-size:18px}.monitor-current,.monitor-next{min-height:160px;padding:20px}.monitor-current{grid-column:1}.monitor-current:has(+ .monitor-next[hidden]){grid-column:1/-1}.monitor-scene-name{font-size:36px}.monitor-counter{font-size:30px;margin-top:10px}.monitor-next .monitor-scene-name{font-size:30px}.monitor-status{grid-column:1/-1}}
 @media(prefers-reduced-motion:reduce){.monitor-next{animation:none;box-shadow:inset 0 0 0 4px #fff}}
+
+.access-controls:has(> :not([hidden])) { display:flex; gap:16px; padding:8px 16px; align-items:center; }
+.access-controls button,.name-choice,.admin-page button,.admin-login button { font:inherit; min-height:44px; padding:8px 16px; border-radius:8px; border:1px solid #606575; background:#252b37; color:#fff; cursor:pointer; }
+.name-picker,.admin-page,.admin-login { padding:20px; overflow:auto; background:#181d27; color:#f5f6fa; }
+.name-picker { flex-shrink:0; max-height:40vh; }
+.name-choices { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:12px; }
+.name-picker a,.admin-page a,.admin-login a,.access-controls a { color:#c7dbff; }
+.admin-page,.admin-login { flex:1; min-height:0; }
+.admin-member { border:1px solid #606575; border-radius:10px; margin:16px 0; padding:16px; display:flex; flex-wrap:wrap; align-items:center; gap:16px; }
+.admin-member input,.admin-label input { font:inherit; padding:8px; max-width:100%; box-sizing:border-box; }
+.admin-member-name { width:180px; }
+.admin-permission { display:inline-flex; align-items:center; gap:8px; min-height:44px; }
+.admin-permission-check { width:22px; height:22px; }
+.admin-orphan { color:#ffc479; }
+.admin-add-form,.admin-login-form { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0; }
+.admin-label { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.settings-config-warning { padding:12px; border:1px solid #b8873d; border-radius:8px; background:#382d1e; color:#ffe0ad; font-size:14px; }

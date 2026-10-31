@@ -113,3 +113,34 @@ that scene. A lost connection clears the playing scene and shows Reconnecting.
 Before using Monitor live, check readability on a phone on a mic stand and queued
 scene pulse timing against Live. Include pale scene colours: the white pulse ring
 may be less visible there, so confirm it is noticeable at arm's length.
+
+### Band members and access
+
+Existing configurations keep access restrictions off. On the laptop, open **Admin**
+(or `#admin`), add band members, tick their pages and mixes, then **Save members**.
+The first saved member enables restrictions. New members get Monitor and a return
+whose name matches theirs exactly, ignoring case. Phones first use the shared band
+password, then choose their name; this is an honour system, not individual accounts.
+**Change name** clears that browser's identity. Cookies remember the choice for a year.
+
+Only the laptop can change connection settings, set the separate admin password,
+or disable restrictions in Settings. Blank password fields keep existing passwords.
+After setting an admin password, phones can open Admin and sign in to edit members
+and permissions. The laptop always has full control via trusted loopback. Removing
+all members leaves restrictions enabled. Missing/renamed returns are flagged in
+Admin; update the member's mix permissions to match the new name. Changes reach
+connected screens automatically, including revoked pages and removed members.
+
+Before gig use, verify in Live/Windows that the jweb laptop window retains admin
+control and that phones remember their names after a browser restart. Fixture
+browser checks cannot verify those device behaviors.
+
+Changing the admin password revokes existing phone admin sessions. Admin cookies
+expire after a year on the server as well as in the browser. Damaged config files
+are preserved for repair and fall back to restricted phone access. On detecting
+damage, startup also attempts a one-time copy to `config.json.damaged` without
+replacing an existing copy. Laptop Settings warns that members/passwords may be
+missing and reports whether a recovery copy is available. Repair or recover the
+file before saving settings; a save replaces the active damaged contents. If the config
+cannot be written, the laptop still starts with an in-memory signing secret;
+phone identities may need to be selected again after restarting.

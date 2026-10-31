@@ -248,3 +248,115 @@ test('connect snapshot sends stopped transport before a retained playing scene',
  a.equal(JSON.parse(s.events[transportIndex].split('data: ')[1]).is_playing,0);
  a.equal(JSON.parse(s.events[playIndex].split('data: ')[1]).playing,23);
 });
+
+const basic={Authorization:'Basic '+Buffer.from('band:pw').toString('base64')};
+async function accessSetup(t,extra={}) {
+ const bridge=new EventEmitter(), saved=[],calls=[];bridge.fire=(...args)=>calls.push(args);bridge.transport=(...args)=>calls.push(args);bridge.setSend=(...args)=>calls.push(args);
+ const app=createApp({bridge,config:{port:8765,username:'band',password:'pw',accessEnabled:true,members:[{id:'alex',name:'Alex',pages:['monitor'],mixes:['Shaun']}],adminPassword:'boss',...extra},saveConfig:c=>saved.push(c),remoteAddressOf:req=>req.headers['x-test-phone']?'192.168.1.3':'127.0.0.1'});
+ const port=await app.listen(0);bridge.emit('mix',mixFixture);bridge.emit('scenes',fixture);t.after(()=>app.close());
+ return {port,bridge,app,saved,calls,phone:{...basic,'x-test-phone':'1'}};
+}
+const cookieOf=r=>r.headers['set-cookie'][0].split(';')[0];
+test('access routes enforce admin, basic auth, origin and identity; laptop recovers corrupt cookies',async t=>{
+ const {port,phone}=await accessSetup(t);
+ a.equal((await req(port,'/api/me',undefined,{'x-test-phone':'1'})).status,401);
+ a.equal(JSON.parse((await req(port,'/api/me',undefined,{...phone,Cookie:'st_id=forged'})).data).kind,'none');
+ for(const route of ['/api/members','/api/config'])a.equal((await req(port,route,undefined,phone)).status,403);
+ a.equal((await req(port,'/api/members',{members:[]},phone)).status,403);
+ a.equal((await req(port,'/api/identify',{memberId:'missing'},phone)).status,404);
+ a.equal((await req(port,'/api/identify',{memberId:'alex'},{...phone,Origin:'http://evil'})).status,403);
+ const chosen=await req(port,'/api/identify',{memberId:'alex'},phone);a.equal(chosen.status,204);a.match(chosen.headers['set-cookie'][0],/HttpOnly; SameSite=Strict; Path=\/; Max-Age=31536000/);
+ const player={...phone,Cookie:cookieOf(chosen)};
+ a.equal(JSON.parse((await req(port,'/api/me',undefined,player)).data).name,'Alex');
+ for(const route of ['/api/fire','/api/transport','/api/members'])a.equal((await req(port,route,{},player)).status,403);
+ a.equal((await req(port,'/api/send',{...sendBody(0.5),returnIndex:3,returnName:'Shaun'},player)).status,403);
+ a.equal((await req(port,'/api/members',undefined,player)).status,403);
+ a.equal((await req(port,'/api/admin-login',{password:'bad'},phone)).status,403);
+ a.equal((await req(port,'/api/admin-login',{password:'boss'},phone)).status,429);
+ a.equal(JSON.parse((await req(port,'/api/me',undefined,{Cookie:'st_id=broken'})).data).kind,'admin');
+ a.equal((await req(port,'/api/forget',{},player)).status,204);
+});
+test('phone admin works before access enabled; only laptop may disable access; settings preserve all access fields',async t=>{
+ const {port,phone,app,saved}=await accessSetup(t,{accessEnabled:false});
+ a.equal((await req(port,'/api/members',undefined,phone)).status,403);
+ const login=await req(port,'/api/admin-login',{password:'boss'},phone);a.equal(login.status,204);
+ const admin={...phone,Cookie:cookieOf(login)};
+ a.equal((await req(port,'/api/members',undefined,admin)).status,200);
+ // Enable restrictions from laptop.
+ a.equal((await req(port,'/api/config',{port:8765,username:'band',password:'',accessEnabled:true})).status,200);
+ a.equal((await req(port,'/api/members',undefined,admin)).status,200);
+ a.equal((await req(port,'/api/config',{},admin)).status,403);
+ const before=app.getConfig();
+ a.equal((await req(port,'/api/config',{port:8765,username:'new',password:'',adminPassword:''})).status,200);
+ const after=app.getConfig();for(const k of ['members','secret','adminPassword','accessEnabled','password'])a.deepEqual(after[k],before[k]);
+ a.equal(saved.at(-1).secret,before.secret);
+ a.equal((await req(port,'/api/config',{port:8765,username:'new',password:'',accessEnabled:false})).status,200);
+});
+test('members mutations broadcast access, preserve ids, revoke cookies and flag orphaned return permissions',async t=>{
+ const {port,phone}=await accessSetup(t),s=stream(port);t.after(()=>s.request.destroy());await s.ready;
+ const cookie=cookieOf(await req(port,'/api/identify',{memberId:'alex'},phone));
+ const members=[{id:'alex',name:'Renamed',pages:['scenes','transport'],mixes:['Missing']}];
+ a.equal((await req(port,'/api/members',{members})).status,200);await req(port,'/');a.ok(s.events.some(e=>e.startsWith('event: access')));
+ const me=JSON.parse((await req(port,'/api/me',undefined,{...phone,Cookie:cookie})).data);a.equal(me.name,'Renamed');a.deepEqual(me.pages,['scenes','transport']);
+ a.deepEqual(JSON.parse((await req(port,'/api/members')).data)[0].orphanMixes,['Missing']);
+ a.equal((await req(port,'/api/members',{members:[{name:'Shaun'}]})).status,200);
+ const fresh=JSON.parse((await req(port,'/api/members')).data)[0];a.ok(fresh.id);a.deepEqual(fresh.pages,['monitor']);a.deepEqual(fresh.mixes,['Shaun']);
+ a.equal((await req(port,'/api/members',{members:[{id:'bad'}]})).status,400);
+ a.equal((await req(port,'/api/members',{members:[]})).status,200);
+ const removed=JSON.parse((await req(port,'/api/me',undefined,{...phone,Cookie:cookie})).data);a.equal(removed.kind,'none');a.equal(removed.accessEnabled,true);
+});
+test('send uses authoritative return index, fails closed after rename and revokes pending sends',async t=>{
+ const {port,phone,bridge,calls}=await accessSetup(t);
+ const player={...phone,Cookie:cookieOf(await req(port,'/api/identify',{memberId:'alex'},phone))};
+ a.equal((await req(port,'/api/send',{...sendBody(0.4),returnIndex:3,returnName:'Shaun'},player)).status,403);
+ a.equal((await req(port,'/api/send',sendBody(0.4),player)).status,204);
+ a.equal((await req(port,'/api/send',sendBody(0.5),player)).status,204);
+ await req(port,'/api/members',{members:[]});await wait(45);a.deepEqual(calls,[[0,2,0.4]]);
+ await req(port,'/api/members',{members:[{id:'alex',name:'Alex',pages:['monitor'],mixes:['Shaun']}]});
+ bridge.emit('mix',{...mixFixture,returns:mixFixture.returns.map(r=>r.index===2?{...r,name:'Renamed'}:r)});
+ a.equal((await req(port,'/api/send',sendBody(0.7),player)).status,403);
+});
+test('coalesced sends retain the identity of the latest sender',async t=>{
+ const {port,phone,calls}=await accessSetup(t);
+ await req(port,'/api/members',{members:['alex','second'].map(id=>({id,name:id,pages:['monitor'],mixes:['Shaun']}))});
+ const player=async id=>({...phone,Cookie:cookieOf(await req(port,'/api/identify',{memberId:id},phone))});
+ const first=await player('alex'),second=await player('second');
+ await req(port,'/api/send',sendBody(0.2),first);await req(port,'/api/send',sendBody(0.3),first);await req(port,'/api/send',sendBody(0.8),second);
+ await req(port,'/api/members',{members:[{id:'second',name:'second',pages:['monitor'],mixes:['Shaun']}]});
+ await wait(45);a.equal(calls.at(-1)[2],0.8);
+});
+
+test('password rotation revokes an already signed-in phone admin at both read endpoints',async t=>{
+ const {port,phone}=await accessSetup(t);const admin={...phone,Cookie:cookieOf(await req(port,'/api/admin-login',{password:'boss'},phone))};
+ a.equal((await req(port,'/api/members',undefined,admin)).status,200);
+ await req(port,'/api/config',{port:8765,username:'band',password:'',adminPassword:'replacement'});
+ a.equal(JSON.parse((await req(port,'/api/me',undefined,admin)).data).kind,'none');a.equal((await req(port,'/api/members',undefined,admin)).status,403);
+});
+test('saving members after laptop disables access does not re-enable restrictions',async t=>{
+ const {port,phone}=await accessSetup(t);const admin={...phone,Cookie:cookieOf(await req(port,'/api/admin-login',{password:'boss'},phone))};
+ const members=JSON.parse((await req(port,'/api/members')).data);
+ await req(port,'/api/config',{port:8765,username:'band',password:'',accessEnabled:false});
+ a.equal((await req(port,'/api/members',{members},admin)).status,200);
+ a.equal(JSON.parse((await req(port,'/api/me',undefined,phone)).data).kind,'open');
+});
+test('send refuses anonymous malformed JSON before parsing but returns a stale mix to eligible members',async t=>{
+ const {port,phone}=await accessSetup(t);
+ const malformedStatus=await new Promise((resolve,reject)=>{
+  const request=http.request({hostname:'127.0.0.1',port,path:'/api/send',method:'POST',headers:{...phone,'Content-Type':'application/json'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});
+  request.on('error',reject);request.end('{');
+ });a.equal(malformedStatus,403);
+ const player={...phone,Cookie:cookieOf(await req(port,'/api/identify',{memberId:'alex'},phone))};
+ const stale=await req(port,'/api/send',{...sendBody(0.5),returnIndex:999},player);a.equal(stale.status,409);a.ok(JSON.parse(stale.data).mix);
+ a.equal((await req(port,'/api/send',{...sendBody(0.5),returnIndex:3,returnName:'Shaun'},player)).status,403);
+});
+
+test('laptop settings report damaged config and a password save retains its recovery copy',async t=>{
+ const fs=require('fs'),os=require('os'),{loadConfig,saveConfig}=require('../device/lib/config');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'damaged-settings-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'config.json');
+ const bytes='{"password":"keep-original","members":[';fs.writeFileSync(file,bytes);
+ const config=loadConfig(file),app=createApp({bridge:new EventEmitter(),config,saveConfig:cfg=>saveConfig(cfg,file)});t.after(()=>app.close());const port=await app.listen(0);
+ const before=JSON.parse((await req(port,'/api/config')).data);a.deepEqual(before.configWarning,{backupAvailable:true});
+ a.equal((await req(port,'/api/config',{port:config.port,username:'band',password:'replacement'})).status,200);
+ a.equal(fs.readFileSync(file+'.damaged','utf8'),bytes);a.equal(JSON.parse(fs.readFileSync(file)).accessEnabled,true);
+ a.deepEqual(JSON.parse((await req(port,'/api/config')).data).configWarning,{backupAvailable:true});
+});
