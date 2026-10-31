@@ -7,7 +7,7 @@
 - **PR:** (opened by implementer)
 - **Base commit:** 15ff7f966193bc1e4d6327041fbb2091bf4a8d6c
 - **Port (if running a server):** 5290 (`SETLIST_TOUCH_PORT=5290 node device/dev.js`)
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 Add band member names on first connect and admin-controlled access, on one shared band password, per Part 2 of the spec and the plan. Done means the plan's acceptance criteria and Review Focus are met, `npm test` passes and a draft PR is open.

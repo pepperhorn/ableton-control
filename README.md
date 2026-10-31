@@ -7,7 +7,7 @@ Max for Live tools for running a live band set from **Ableton Live 12 Session vi
 | Device | What it does | Status |
 | --- | --- | --- |
 | [Setlist Touch](#setlist-touch) | Large touch screen for the current song's scenes, with a setlist sidebar and bar-accurate progress. Works in Live and in any browser, including a phone over Tailscale. | Built and reviewed; needs a check in Live on Windows |
-| [In-ear mix pages](#in-ear-mix-pages-planned) | Setlist Touch pages where any player adjusts any player's in-ear mix from their phone | Built and reviewed; needs a check in Live on Windows |
+| [In-ear mix pages](#in-ear-mix-pages) | Setlist Touch pages where any player adjusts any player's in-ear mix from their phone | Built and reviewed; needs a check in Live on Windows |
 | [SceneNav](#scenenav) | Prev / Launch / Next scene buttons you can map to computer keys or a MIDI controller | Usable, not yet tested in Live |
 
 Requires Ableton Live 12 Suite (Max for Live included). Setlist Touch targets a Windows touch laptop.
@@ -20,6 +20,8 @@ A Max for Live MIDI Effect that runs a small web server inside Live. It shows th
 - **Progress:** bar lines on each row from the clip length on your timing track, plus a fill and a `bar / total` counter while a scene plays. A solid outline marks the playing scene and a dashed one the queued scene.
 - **Touch safety:** only a clean tap launches. Drags, scrolls, long presses and multi-touch don't. The screen never switches song by itself; a "Now playing" banner offers the way there. Each screen has a lock.
 - **Transport (opt-in):** add `?transport=1` to the address for Play (tap), Stop and Arrangement Rec (1-second hold), plus tempo and bar.beat position.
+- **Monitor tab:** a read-only page for players: the current scene with its bar count, and the next scene flashing once it's triggered.
+- **Band access (optional):** add members in admin, and each picks their name on first connect. You choose who gets which pages and mixes. It's on one shared band password, so names are an honour system. The laptop is always admin.
 - **Anywhere:** a window inside Live, `http://localhost:8765` on the laptop, or `http://<laptop>:8765` from phones on your LAN or tailnet, behind a username and password.
 
 ### Scene naming convention
