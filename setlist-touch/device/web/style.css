@@ -37,3 +37,22 @@ body[data-page=mix] .page-switch{margin-right:auto}
 @media(max-width:600px){.transport-bar{gap:6px;padding:8px;flex-wrap:wrap}.transport-bar button{flex:1;min-width:80px;padding:7px 10px;font-size:13px}.transport-playing{margin-left:0;flex:1}.transport-readout{font-size:12px}.transport-position{font-size:15px}}
 
 .index-progress{width:100%;max-width:640px;margin:0 auto;padding:2px 10px}.index-progress-label{display:block;font-size:13px;font-variant-numeric:tabular-nums}.index-progress-track{height:4px;background:#ffffff40;border-radius:2px;margin-top:5px;overflow:hidden}.index-progress-bar{height:100%;width:0;background:#fff;border-radius:inherit}
+
+body[data-page=monitor] .sidebar-toggle,body[data-page=monitor] .song-nav,body[data-page=monitor] .song-title,body[data-page=monitor] .lock-toggle{display:none}
+body[data-page=monitor] .page-switch{margin-right:auto}
+.monitor-page{display:flex;flex:1;min-height:0;flex-direction:column;gap:20px;width:100%;max-width:1400px;margin:0 auto;padding:28px;overflow-y:auto}
+.monitor-song{margin:0;font-size:clamp(18px,2.5vw,30px);color:#c2cbdb;overflow-wrap:anywhere}
+.monitor-current,.monitor-next{position:relative;isolation:isolate;flex:1;min-height:180px;display:flex;flex-direction:column;justify-content:center;padding:28px 36px;border-radius:16px;overflow:hidden;overflow-wrap:anywhere}
+.monitor-current{outline:3px solid #f4f4f6;outline-offset:-3px}
+.monitor-caption,.monitor-scene-name,.monitor-counter{position:relative;z-index:3;margin:0}
+.monitor-caption{font-size:clamp(14px,1.6vw,20px);font-weight:600;letter-spacing:.06em}
+.monitor-scene-name{font-size:clamp(32px,5vw,72px);font-weight:600;line-height:1.2;margin-top:12px}
+.monitor-counter{font-size:clamp(30px,4vw,56px);font-weight:700;font-variant-numeric:tabular-nums;margin-top:18px}
+.monitor-fill{position:absolute;inset:0 auto 0 0;background:rgba(0,0,0,.28);z-index:2;pointer-events:none}
+.monitor-next{flex:.65;min-height:150px;animation:monitor-pulse 2.4s ease-in-out infinite}
+.monitor-next .monitor-scene-name{font-size:clamp(28px,4vw,56px)}
+.monitor-status{margin:auto;text-align:center;font-size:clamp(32px,5vw,64px);color:#aeb9cc}
+@keyframes monitor-pulse{0%,100%{box-shadow:inset 0 0 0 4px #fff}50%{box-shadow:inset 0 0 0 4px #ffffff40}}
+@media(max-width:600px){.monitor-page{padding:16px;gap:16px}.monitor-current,.monitor-next{padding:24px;min-height:150px}.monitor-scene-name{font-size:36px}.monitor-next .monitor-scene-name{font-size:30px}}
+@media(max-height:500px) and (min-width:601px){.monitor-page{display:grid;grid-template-columns:1.4fr 1fr;grid-template-rows:auto 1fr;padding:16px;gap:12px}.monitor-song{grid-column:1/-1;font-size:18px}.monitor-current,.monitor-next{min-height:160px;padding:20px}.monitor-current{grid-column:1}.monitor-current:has(+ .monitor-next[hidden]){grid-column:1/-1}.monitor-scene-name{font-size:36px}.monitor-counter{font-size:30px;margin-top:10px}.monitor-next .monitor-scene-name{font-size:30px}.monitor-status{grid-column:1/-1}}
+@media(prefers-reduced-motion:reduce){.monitor-next{animation:none;box-shadow:inset 0 0 0 4px #fff}}

@@ -8,13 +8,28 @@ const {authorize, isTrustedLoopback} = require('./auth');
 const {loadConfig, saveConfig: persist, validConfig} = require('./config');
 function createApp({bridge, config = loadConfig(), saveConfig = persist,
   webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
-  let cfg = {...config}, parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null}, pos = null;
+  let cfg = {...config}, parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
-  let indexing = null;
+  let indexing = null, rawScenes = new Map();
+  function sceneDetails(index) {
+    // Live can publish new indexes before the rebuilt scene map arrives.
+    if (indexing && indexing.done < indexing.total) return null;
+    const scene = rawScenes.get(index);
+    return scene ? {name:scene.name, color:scene.color, loopBeats:scene.loopBeats, beatsPerBar:scene.beatsPerBar} : null;
+  }
+  function refreshPlay() {
+    play = {...play, playingSongId:parsed.sceneToSong[play.playing] === undefined ? null : parsed.sceneToSong[play.playing],
+      current:sceneDetails(play.playing), next:sceneDetails(play.fired)};
+  }
   function onProgress(value) {
     if (!value || !Number.isInteger(value.done) || !Number.isInteger(value.total) ||
         value.done < 0 || value.total < 0 || value.done > value.total) return;
-    indexing = {done:value.done, total:value.total}; broadcast('progress', indexing);
+    const previousPlay = JSON.stringify(play);
+    indexing = {done:value.done, total:value.total};
+    refreshPlay();
+    broadcast('progress', indexing);
+    // Invalidate on scan start and restore on completion, even without onPlay.
+    if (JSON.stringify(play) !== previousPlay) broadcast('play', play);
   }
   bridge.on('progress', onProgress);
   let setJSON = null, mix = parseMix(), mixJSON = null;
@@ -35,13 +50,15 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   function broadcast(event, data) { for (const res of clients) { if (res.writableLength > 1024 * 256) res.destroy(); else send(res, event, data); } }
   function onScenes(raw) {
     const next = parseSet(raw), serialized = JSON.stringify(next);
-    if (serialized === setJSON) return;
-    parsed = next; setJSON = serialized;
-    play = {...play, playingSongId:parsed.sceneToSong[play.playing] === undefined ? null : parsed.sceneToSong[play.playing]};
-    broadcast('set', parsed); broadcast('play', play);
+    rawScenes = new Map(raw.map(scene => [scene.index, scene]));
+    const previousPlay = JSON.stringify(play);
+    const changed = serialized !== setJSON;
+    parsed = next; setJSON = serialized; refreshPlay();
+    if (changed) broadcast('set', parsed);
+    if (changed || JSON.stringify(play) !== previousPlay) broadcast('play', play);
   }
   function onPlay(value) {
-    play = {...value, playingSongId:parsed.sceneToSong[value.playing] === undefined ? null : parsed.sceneToSong[value.playing]};
+    play = {...value}; refreshPlay();
     if (!pos || pos.scene !== value.playing) { pos = null; pendingPos = null; }
     broadcast('play', play);
   }
@@ -130,8 +147,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         res.writeHead(200, {'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});
         clients.add(res); if (setJSON !== null) send(res, 'set', parsed);
         send(res, 'mix', mix);
-        send(res, 'play', play); if (pos) send(res, 'pos', pos);
         if (transport) send(res, 'transport', transport);
+        send(res, 'play', play); if (pos) send(res, 'pos', pos);
         if (indexing) send(res, 'progress', indexing);
         res.on('close', () => clients.delete(res)); return;
       }

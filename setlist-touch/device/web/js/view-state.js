@@ -1,13 +1,14 @@
+export const pageOf = value => ['scenes','mix','monitor'].includes(value) ? value : 'scenes';
 const keyOf = song => song ? {title:song.title, occurrence:song.occurrence} : null;
 const same = (song, key) => song && key && song.title === key.title && song.occurrence === key.occurrence;
 export function initialState(prefs = {}) {
-  return {songKey:null, filter:typeof prefs.filter === 'string' ? prefs.filter : null,
+  return {page:pageOf(prefs.page), songKey:null, filter:typeof prefs.filter === 'string' ? prefs.filter : null,
     sidebarOpen:prefs.sidebarOpen !== false, locked:prefs.locked === true, connected:false, songOrder:[]};
 }
 export function currentSong(state, set) { return set.songs.find(song => same(song, state.songKey)) || null; }
 export function visibleSongs(state, set) { return set.songs.filter(song => state.filter === null || song.category === state.filter); }
 export function canLaunch(state) { return !state.locked && state.connected; }
-export function prefsOf({sidebarOpen, locked, filter}, mixPrefs) { return {sidebarOpen, locked, filter, ...mixPrefs}; }
+export function prefsOf({sidebarOpen, locked, filter, page}, mixPrefs) { return {sidebarOpen, locked, filter, page:pageOf(page), ...mixPrefs}; }
 export function banner(state, set, play) {
   const song = set.songs.find(s => s.id === play.playingSongId);
   return song && !same(song, state.songKey) ? {songId:song.id, title:song.title} : null;

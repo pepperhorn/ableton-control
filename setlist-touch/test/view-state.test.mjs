@@ -17,4 +17,12 @@ test('duplicate titles stay on occurrence 2',()=>{const old=make(['* A','X','* A
 test('deleted song selects nearest surviving following then preceding then null',()=>{const old=make(['* A','X','* B','Y','* C','Z','* D','Q']);let s=select(reduce(initialState(),{type:'set'},old),2,old);let next=make(['* A','X','* C','Z','* D','Q']);a.equal(currentSong(reduce(s,{type:'set'},next),next).title,'C');s=select(reduce(initialState(),{type:'set'},old),6,old);next=make(['* A','X','* B','Y']);a.equal(currentSong(reduce(s,{type:'set'},next),next).title,'B');a.equal(currentSong(reduce(s,{type:'set'},make([])),make([])),null);});
 test('play in other song never changes current, banner navigates explicitly',()=>{let s=select(initialState(),9);const play={playingSongId:19};a.deepEqual(banner(s,set,play),{songId:19,title:'RISE >>'});a.equal(currentSong(s,set).id,9);s=reduce(s,{type:'showPlaying',play},set);a.equal(currentSong(s,set).id,19);a.equal(banner(s,set,play),null);a.equal(banner(s,set,{playingSongId:null}),null);});
 test('filters, steps and clamps',()=>{let s=reduce(initialState(),{type:'set'},set);s=reduce(s,{type:'filter',category:'DINNER'},set);a.equal(visibleSongs(s,set).length,3);s=reduce(s,{type:'stepSong',dir:1},set);a.equal(currentSong(s,set).id,9);s=reduce(s,{type:'stepSong',dir:-1},set);a.equal(currentSong(s,set).id,9);for(let i=0;i<5;i++)s=reduce(s,{type:'stepSong',dir:1},set);a.equal(currentSong(s,set).title,'SUN GODDESS >>');});
-test('disconnected and locked launching; persistent prefs only',()=>{let s=initialState();a.equal(canLaunch(s),false);s=reduce(s,{type:'connected',value:true},set);a.equal(canLaunch(s),true);s=reduce(s,{type:'toggleLock'},set);a.equal(canLaunch(s),false);a.deepEqual(Object.keys(prefsOf(s)).sort(),['filter','locked','sidebarOpen']);});
+test('disconnected and locked launching; persistent prefs only',()=>{let s=initialState();a.equal(canLaunch(s),false);s=reduce(s,{type:'connected',value:true},set);a.equal(canLaunch(s),true);s=reduce(s,{type:'toggleLock'},set);a.equal(canLaunch(s),false);a.deepEqual(Object.keys(prefsOf(s)).sort(),['filter','locked','page','sidebarOpen']);});
+test('page preferences persist Monitor independently of mix tab state',()=>{
+ for(const page of ['scenes','mix','monitor']){
+  const state=initialState({page});a.equal(state.page,page);
+  const prefs=prefsOf(state,{page,tab:'Shaun'});a.equal(prefs.page,page);a.equal(prefs.tab,'Shaun');
+  a.equal(initialState(prefs).page,page);
+ }
+ a.equal(initialState({page:'invalid'}).page,'scenes');
+});
