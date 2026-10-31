@@ -113,3 +113,24 @@ that scene. A lost connection clears the playing scene and shows Reconnecting.
 Before using Monitor live, check readability on a phone on a mic stand and queued
 scene pulse timing against Live. Include pale scene colours: the white pulse ring
 may be less visible there, so confirm it is noticeable at arm's length.
+
+### Band members and access
+
+Existing configurations keep access restrictions off. On the laptop, open **Admin**
+(or `#admin`), add band members, tick their pages and mixes, then **Save members**.
+The first saved member enables restrictions. New members get Monitor and a return
+whose name matches theirs exactly, ignoring case. Phones first use the shared band
+password, then choose their name; this is an honour system, not individual accounts.
+**Change name** clears that browser's identity. Cookies remember the choice for a year.
+
+Only the laptop can change connection settings, set the separate admin password,
+or disable restrictions in Settings. Blank password fields keep existing passwords.
+After setting an admin password, phones can open Admin and sign in to edit members
+and permissions. The laptop always has full control via trusted loopback. Removing
+all members leaves restrictions enabled. Missing/renamed returns are flagged in
+Admin; update the member's mix permissions to match the new name. Changes reach
+connected screens automatically, including revoked pages and removed members.
+
+Before gig use, verify in Live/Windows that the jweb laptop window retains admin
+control and that phones remember their names after a browser restart. Fixture
+browser checks cannot verify those device behaviors.

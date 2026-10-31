@@ -1,5 +1,6 @@
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path');
+const {normalizeAccess, validMembers, sign, identify, can, meFor, newMember, checkAdminPassword} = require('./access');
 const {parseSet} = require('./parse-set');
 const {progress} = require('./progress');
 const {parseMix} = require('./parse-mix');
@@ -8,8 +9,9 @@ const {authorize, isTrustedLoopback} = require('./auth');
 const {loadConfig, saveConfig: persist, validConfig} = require('./config');
 function createApp({bridge, config = loadConfig(), saveConfig = persist,
   webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
-  let cfg = {...config}, parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
+  let cfg = normalizeAccess(config), parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
+  const loginAttempts = new Map();
   let indexing = null, rawScenes = new Map();
   function sceneDetails(index) {
     // Live can publish new indexes before the rebuilt scene map arrives.
@@ -106,15 +108,15 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     const delay = 33 - (Date.now() - entry.last);
     if (delay <= 0) flush(); else if (!entry.timer) entry.timer = setTimeout(flush, delay);
   }
-  function setSend(value) {
+  function setSend(value, identityOf) {
     const key = `${value.trackIndex}:${value.returnIndex}`;
     let entry = sends.get(key);
     if (!entry) { entry = {last:0}; sends.set(key, entry); }
-    entry.pending = value;
+    entry.pending = value; entry.identityOf = identityOf;
     const flush = () => {
       entry.timer = null;
       const pending = entry.pending; entry.pending = null;
-      if (!pending || !target(pending)) return;
+      if (!pending || !target(pending) || !can(entry.identityOf(), 'send', pending.returnName)) return;
       entry.last = Date.now(); bridge.setSend(pending.trackIndex, pending.returnIndex, pending.value);
     };
     const delay = 33 - (Date.now() - entry.last);
@@ -128,7 +130,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     res.writeHead(status, {'Content-Type':type, 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'}); res.end(body);
   }
   function json(res, data) { reply(res, 200, JSON.stringify(data), 'application/json'); }
-  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password}; }
+  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password, ...(cfg.accessEnabled || cfg.adminPassword || cfg.members.length ? {hasAdminPassword:!!cfg.adminPassword,accessEnabled:cfg.accessEnabled} : {})}; }
   async function body(req) {
     if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) throw new Error('Expected JSON');
     let text = '';
@@ -142,7 +144,49 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
       if (access === 'challenge') { res.setHeader('WWW-Authenticate', 'Basic realm="Setlist Touch"'); return reply(res, 401, 'Authentication required'); }
       if (access === 'forbidden') return reply(res, 403, 'Set a password in Setlist Touch settings on the laptop.');
       if (req.method === 'POST' && req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) return reply(res, 403, 'Invalid origin');
+      const trusted = isTrustedLoopback(remoteAddress, req.headers.host);
+      const identityOf = () => identify({trusted, cookie:req.headers.cookie},cfg);
+      const identity = identityOf();
       const route = req.url.split('?')[0];
+      const cookie = payload => res.setHeader('Set-Cookie', 'st_id=' + (payload ? sign(payload,cfg.secret) : '') + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + (payload ? 31536000 : 0));
+      if (route === '/api/me' && req.method === 'GET') return json(res, meFor(identity,cfg));
+      if (route === '/api/forget' && req.method === 'POST') { cookie(null); return reply(res,204); }
+      if (route === '/api/identify' && req.method === 'POST') {
+        let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+        const member = cfg.members.find(m => m.id === (value || {}).memberId);
+        if (!member) return reply(res,404,'Unknown member');
+        cookie({kind:'member',memberId:member.id}); return reply(res,204);
+      }
+      if (route === '/api/admin-login' && req.method === 'POST') {
+        const now = Date.now();
+        if (now - (loginAttempts.get(remoteAddress) || 0) < 1000) return reply(res,429,'Try again in a second');
+        for (const [address,time] of loginAttempts) if (now - time >= 1000) loginAttempts.delete(address);
+        loginAttempts.set(remoteAddress,now);
+        let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+        if (!checkAdminPassword((value || {}).password,cfg)) return reply(res,403,'Incorrect admin password');
+        cookie({kind:'admin'}); return reply(res,204);
+      }
+      if (route === '/api/members') {
+        // Open access is not authority to administer the band from a phone.
+        if (identity.kind !== 'admin') return reply(res,403,'Admin required');
+        if (req.method === 'GET') return json(res,cfg.members.map(m => ({...m,orphanMixes:m.mixes.filter(name => !mix.returns.some(r => r.name === name))})));
+        if (req.method === 'POST') {
+          let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+          if (!value || !Array.isArray(value.members)) return reply(res,400,'Invalid members');
+          if (value.members.some(m => !m || typeof m.name !== 'string')) return reply(res,400,'Invalid members');
+          const members = value.members.map(m => {
+            const defaults = !m.id ? newMember(m.name,mix.returns.map(r => r.name)) : {};
+            return {id:m.id || defaults.id,name:m.name,pages:m.pages === undefined ? defaults.pages : m.pages,mixes:m.mixes === undefined ? defaults.mixes : m.mixes};
+          });
+          if (!validMembers(members)) return reply(res,400,'Invalid members');
+          if (changing) return reply(res,409,'Settings are being changed');
+          changing = true;
+          try {
+            const next = {...cfg,members,accessEnabled:cfg.accessEnabled || members.length > 0};
+            await saveConfig(next); cfg = next; broadcast('access',null); return json(res,meFor(identityOf(),cfg));
+          } finally { changing = false; }
+        }
+      }
       if (route === '/api/events' && req.method === 'GET') {
         res.writeHead(200, {'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});
         clients.add(res); if (setJSON !== null) send(res, 'set', parsed);
@@ -153,11 +197,13 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         res.on('close', () => clients.delete(res)); return;
       }
       if (route === '/api/transport' && req.method === 'POST') {
+        if (!can(identity,'transport')) return reply(res,403,'Transport not allowed');
         let value; try { value = await body(req); } catch (_) { return reply(res, 400, 'Invalid JSON'); }
         if (!validCommand(value)) return reply(res, 400, 'Invalid transport command');
         bridge.transport(value.command, value.value); return reply(res, 204);
       }
       if (route === '/api/fire' && req.method === 'POST') {
+        if (!can(identity,'fire')) return reply(res,403,'Scenes not allowed');
         let value; try { value = await body(req); } catch (_) { return reply(res, 400, 'Invalid JSON'); }
         if (!value || !Number.isInteger(value.sceneIndex) || typeof value.name !== 'string') return reply(res, 400, 'Invalid scene');
         const row = parsed.songs.flatMap(s => s.rows).find(r => r.sceneIndex === value.sceneIndex);
@@ -166,12 +212,14 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
       }
       if (route === '/api/send' && req.method === 'POST') {
         let value; try { value = await body(req); } catch (_) { return reply(res, 400, 'Invalid JSON'); }
+        const ret = value && mix.returns.find(r => r.returnIndex === value.returnIndex);
+        if (!can(identity,'send',ret && ret.name)) return reply(res,403,'Mix not allowed');
         if (!value || !Number.isInteger(value.trackIndex) || !Number.isInteger(value.returnIndex) ||
             typeof value.rawName !== 'string' || typeof value.returnName !== 'string' ||
             typeof value.value !== 'number' || !Number.isFinite(value.value) || value.value < 0 || value.value > 1)
           return reply(res, 400, 'Invalid send');
         if (!target(value)) return reply(res, 409, JSON.stringify({mix}), 'application/json');
-        setSend(value); return reply(res, 204);
+        setSend(value, identityOf); return reply(res, 204);
       }
       if (route === '/api/config') {
         if (!isTrustedLoopback(remoteAddress, req.headers.host)) return reply(res, 403, 'Settings are only available on the laptop.');
@@ -180,13 +228,16 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
           let value; try { value = await body(req); } catch (_) { return reply(res, 400, 'Invalid JSON'); }
           if (!validConfig(value)) return reply(res, 400, 'Invalid port or credentials');
           if (value.password === '') value.password = cfg.password;
+          if (value.accessEnabled !== undefined && typeof value.accessEnabled !== 'boolean' || value.adminPassword !== undefined && typeof value.adminPassword !== 'string') return reply(res,400,'Invalid access settings');
+          value = {...cfg, port:value.port,username:value.username,password:value.password,
+            adminPassword:value.adminPassword || cfg.adminPassword, accessEnabled:value.accessEnabled === undefined ? cfg.accessEnabled : value.accessEnabled};
           if (changing) return reply(res, 409, 'Settings are being changed');
           changing = true;
           let candidate;
           try {
             if (value.port !== cfg.port) candidate = await start(value.port);
             await saveConfig(value);
-            cfg = {port:value.port, username:value.username, password:value.password};
+            cfg = value; broadcast('access',null);
             const previous = active;
             if (candidate) { active = candidate; if (typeof bridge.addressChanged === 'function') bridge.addressChanged(cfg.port); }
             json(res, publicConfig());
