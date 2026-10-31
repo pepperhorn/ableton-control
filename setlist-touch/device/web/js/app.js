@@ -2,7 +2,7 @@ import {createTransportRenderer} from './transport-render.js';
 import {createTapDetector} from './tap.js';
 import {initialMixState, reduceMix} from './mix-view.js';
 import {createMixRenderer} from './mix-render.js';
-import {initialState, reduce, canLaunch, prefsOf} from './view-state.js';
+import {initialState, reduce, canLaunch, prefsOf, pageOf} from './view-state.js';
 import {render, updatePlayback, fitSceneRows} from './render.js';
 const $ = selector => document.querySelector(selector);
 const local = ['localhost','127.0.0.1','[::1]','::1'].includes(location.hostname);
@@ -10,24 +10,38 @@ let prefs = {}; try { prefs = JSON.parse(localStorage.getItem('setlist-touch') |
 let state = initialState(prefs), set = {songs:[],categories:[],sceneToSong:{}}, play = {playing:-1,fired:-1,playingSongId:null}, pos = null;
 let snapshot = false, initialPlay = false, transport = false, mixSnapshot = false;
 let mix = {returns:[],strips:[]}, mixState = initialMixState(prefs), mixJSON = null;
-let setJSON = null, indexProgress = null;
+let setJSON = null, indexProgress = null, transportState = null, playSnapshot = false, monitorSongs = [];
+let monitorUI = null, monitorLoading = false;
+function paintMonitor() { if (monitorUI) monitorUI.render({songs:monitorSongs, play, pos, transport:transportState, connected:transport && playSnapshot}); }
+function syncMonitor(active) {
+  if (monitorUI) { monitorUI.setActive(active); paintMonitor(); return; }
+  if (!active || monitorLoading) return;
+  monitorLoading = true;
+  import('./monitor-render.js').then(({createMonitorRenderer}) => {
+    monitorUI = createMonitorRenderer(); shell();
+  }).catch(() => { monitorLoading = false; status('Could not load Monitor. Reload to retry.'); });
+}
+const transportEnabled = new URLSearchParams(location.search).get('transport') === '1';
 const detector = createTapDetector(), pointers = new Set();
 const mixUI = createMixRenderer({
   stateOf:() => ({...state,connected:transport && mixSnapshot}), mixOf:() => mix, viewOf:() => mixState,
   onTab:name => dispatchMix({type:'tab',name}), onSnapshot:acceptMix, status
 });
 const transportUI = createTransportRenderer({
-  enabled:new URLSearchParams(location.search).get('transport') === '1',
-  stateOf:() => ({...state, connected:transport}), status
+  enabled:transportEnabled,
+  stateOf:() => ({...state, connected:transport && state.page !== 'monitor'}), status
 });
-function savePrefs() { try { localStorage.setItem('setlist-touch',JSON.stringify(prefsOf(state,mixState))); } catch (_) {} }
+function savePrefs() { try { localStorage.setItem('setlist-touch',JSON.stringify(prefsOf(state,{...mixState,page:state.page}))); } catch (_) {} }
 function shell() {
   const settingsOpen = location.hash === '#settings' && local;
-  document.body.dataset.page = mixState.page;
-  $('.setlist-main').hidden = settingsOpen || mixState.page !== 'scenes';
-  $('.mix-panel').hidden = settingsOpen || mixState.page !== 'mix';
-  for (const button of document.querySelectorAll('.page-choice')) button.setAttribute('aria-pressed',String(button.dataset.page === mixState.page));
-  const ready = mixState.page === 'mix' ? mixSnapshot && mix.returns.length > 0 : snapshot;
+  document.body.dataset.page = state.page;
+  $('.setlist-main').hidden = settingsOpen || state.page !== 'scenes';
+  $('.mix-panel').hidden = settingsOpen || state.page !== 'mix';
+  for (const button of document.querySelectorAll('.page-choice')) button.setAttribute('aria-pressed',String(button.dataset.page === state.page));
+  $('.monitor-page').hidden = settingsOpen || state.page !== 'monitor';
+  $('.transport-bar').hidden = !transportEnabled || state.page === 'monitor';
+  syncMonitor(!settingsOpen && state.page === 'monitor');
+  const ready = state.page === 'monitor' ? playSnapshot : state.page === 'mix' ? mixSnapshot && mix.returns.length > 0 : snapshot;
   const indexing = transport && indexProgress && indexProgress.done < indexProgress.total;
   $('.connection-bar').hidden = transport && ready && !indexing;
   $('.connection-label').hidden = !!indexing;
@@ -43,7 +57,10 @@ function shell() {
   mixUI.syncAvailability(); transportUI.syncAvailability();
 }
 function dispatchMix(action) {
-  cancelGestures(); mixState = reduceMix(mixState,action,mix); savePrefs(); mixUI.render(); shell();
+  cancelGestures();
+  // Page preference belongs to the shell; the existing mix reducer owns mix tabs.
+  if (action.type === 'page') state = {...state, page:pageOf(action.page)};
+  mixState = reduceMix(mixState,action,mix); savePrefs(); mixUI.render(); shell();
 }
 function acceptMix(next) {
   mixSnapshot = true;
@@ -70,7 +87,7 @@ $('.now-playing-banner').addEventListener('click',()=>dispatch({type:'showPlayin
 let statusTimer;
 function status(text) { clearTimeout(statusTimer); $('.launch-status').textContent = text; statusTimer = setTimeout(()=>$('.launch-status').textContent='',3500); }
 async function launch(row) {
-  if (!canLaunch(state) || !row.isConnected) return;
+  if (state.page !== 'scenes' || !canLaunch(state) || !row.isConnected) return;
   try {
     const res = await fetch('/api/fire',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sceneIndex:Number(row.dataset.sceneIndex),name:row.dataset.name})});
     if (res.status === 409) { row.classList.add('is-stale'); setTimeout(()=>row.classList.remove('is-stale'),1000); status('Set changed. Check the row and tap again.'); }
@@ -100,9 +117,9 @@ document.addEventListener('keydown',e=>{if(e.key===' ' && !(e.target instanceof 
 $('.scene-list').addEventListener('mousedown',e=>e.preventDefault());
 new ResizeObserver(fitSceneRows).observe($('.scene-list'));
 const events = new EventSource('/api/events');
-events.addEventListener('open',()=>{transportUI.reset();transport=true;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
-events.addEventListener('error',()=>{transportUI.reset();transport=false;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
-events.addEventListener('transport',e=>transportUI.accept(JSON.parse(e.data)));
+events.addEventListener('open',()=>{transportState=null;playSnapshot=false;transportUI.reset();transport=true;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
+events.addEventListener('error',()=>{transportState=null;playSnapshot=false;transportUI.reset();transport=false;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
+events.addEventListener('transport',e=>{transportState=JSON.parse(e.data);transportUI.accept(transportState);paintMonitor();});
 events.addEventListener('mix',e=>acceptMix(JSON.parse(e.data)));
 events.addEventListener('level',e=>{
   const level=JSON.parse(e.data), strip=mix.strips.find(s=>s.trackIndex===level.trackIndex);
@@ -111,7 +128,7 @@ events.addEventListener('level',e=>{
 });
 events.addEventListener('progress',e=>{indexProgress=JSON.parse(e.data);shell();});
 events.addEventListener('set',e=>{
-  const next=JSON.parse(e.data);
+  const next=JSON.parse(e.data); monitorSongs=next.songs;
   // Keep the last song visible, but never enable launching from an empty set.
   if(!next.songs.length){snapshot=false;dispatch({type:'connected',value:false});return;}
   snapshot=true;
@@ -121,12 +138,12 @@ events.addEventListener('set',e=>{
   if(initialPlay)dispatch({type:'set',play});
 });
 events.addEventListener('play',e=>{
-  play=JSON.parse(e.data); if(pos&&pos.scene!==play.playing)pos=null;
+  playSnapshot=true;play=JSON.parse(e.data); if(pos&&pos.scene!==play.playing)pos=null;
   if(!initialPlay&&snapshot){initialPlay=true;dispatch({type:'set',play});}
   if(snapshot&&!state.connected)dispatch({type:'connected',value:true});
-  updatePlayback(state,set,play,pos);
+  updatePlayback(state,set,play,pos);shell();
 });
-events.addEventListener('pos',e=>{pos=JSON.parse(e.data);updatePlayback(state,set,play,pos);});
+events.addEventListener('pos',e=>{pos=JSON.parse(e.data);updatePlayback(state,set,play,pos);paintMonitor();});
 async function settings() {
   const show=location.hash==='#settings'&&local;
   cancelGestures();$('.settings-panel').hidden=!show;$('.setlist-header').hidden=show;shell();

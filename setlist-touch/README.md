@@ -94,3 +94,18 @@ still need checking in Live on the show computer.
 
 For a slow-index fixture preview:
 `SETLIST_TOUCH_PORT=5250 SETLIST_TOUCH_SLOW_INDEX=1 node device/dev.js`.
+
+### Monitor
+
+Choose **Monitor** for a read-only view of the current scene and any queued scene.
+The current scene shows its Live colour, with the same bar count and progress as
+Scenes when a timing clip is available. The next scene pulses slowly until it
+launches (a solid highlight with reduced motion). There are no launch, mix or
+transport controls on Monitor, including with `?transport=1`. Page choice is
+remembered on this device. Monitor requests a screen Wake Lock when supported;
+plain HTTP on a LAN does not provide the secure context it needs.
+
+Monitor follows the timing track. Running transport with no tracked scene shows
+“Playing”; stopped transport shows “Stopped”. If an empty timing slot has no stop
+button, Live keeps the previous timing clip running, so Monitor continues to show
+that scene. A lost connection clears the playing scene and shows Reconnecting.

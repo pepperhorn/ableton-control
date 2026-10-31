@@ -15,7 +15,7 @@
 </div>
 </div>
 <header class="setlist-header">
-<nav class="page-switch" aria-label="Page"><button class="page-choice" data-page="scenes" type="button" aria-pressed="true">Scenes</button><button class="page-choice" data-page="mix" type="button" aria-pressed="false">My mix</button></nav>
+<nav class="page-switch" aria-label="Page"><button class="page-choice" data-page="scenes" type="button" aria-pressed="true">Scenes</button><button class="page-choice" data-page="mix" type="button" aria-pressed="false">My mix</button><button class="page-choice" data-page="monitor" type="button" aria-pressed="false">Monitor</button></nav>
 <button class="sidebar-toggle" type="button" aria-controls="setlist-sidebar">☰ Setlist</button>
 <button class="song-nav song-nav-prev" type="button"></button>
 <h1 class="song-title">Setlist Touch</h1>
@@ -40,6 +40,17 @@
 <section class="mix-panel" aria-label="In-ear mix" hidden>
 <div class="mix-heading"><h2 class="mix-title">In-ear mix</h2><p class="mix-hint">Slide sideways to adjust · scroll to browse</p></div>
 <nav class="send-tabs" aria-label="Player mixes"></nav><div class="mix-list"></div>
+</section>
+<section class="monitor-page" aria-label="Live monitor" hidden>
+<p class="monitor-song"></p>
+<p class="monitor-status" role="status">Disconnected</p>
+<div class="monitor-current" hidden>
+<span class="monitor-caption">Now playing</span>
+<span class="monitor-barlines tile-barlines" aria-hidden="true"></span>
+<span class="monitor-fill" aria-hidden="true" hidden></span>
+<h2 class="monitor-scene-name"></h2><p class="monitor-counter" hidden></p>
+</div>
+<div class="monitor-next" hidden><span class="monitor-caption">Up next</span><h2 class="monitor-scene-name"></h2></div>
 </section>
 <section class="settings-panel" hidden>
 <a class="settings-back" href="#">◀ Back to setlist</a><h2 class="settings-heading">Settings</h2>

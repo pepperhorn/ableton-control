@@ -167,3 +167,41 @@ test('slow fake index publishes progress before a single complete scene snapshot
  for(let n=0;n<fixture.length;n++)intervals[0]();
  a.deepEqual(events.at(-2),['scenes',fixture.length]);a.deepEqual(events.at(-1),['progress',fixture.length,fixture.length]);a.deepEqual(cleared,[1]);
 });
+
+test('play carries current/next scene details for pre-title, title and normal scenes and connect snapshots',async t=>{
+ const {port,bridge}=await setup(t);
+ const scenes=[{index:0,name:'Count in',color:1,loopBeats:16,beatsPerBar:4},
+  {index:1,name:'* Song',color:2,loopBeats:null,beatsPerBar:4},
+  {index:2,name:'Verse',color:3,loopBeats:32,beatsPerBar:4}];
+ bridge.emit('scenes',scenes);
+ const s=stream(port);t.after(()=>s.request.destroy());await s.ready;await req(port,'/');
+ const plays=()=>s.events.filter(e=>e.startsWith('event: play')).map(e=>JSON.parse(e.split('data: ')[1]));
+ const details=({index,...scene})=>scene;
+ for (const [playing,fired] of [[0,1],[1,2],[2,0],[2,2]]) {
+  bridge.emit('play',{playing,fired});await req(port,'/');
+  const p=plays().at(-1);a.equal(p.playing,playing);a.equal(p.fired,fired);
+  a.deepEqual(p.current,details(scenes[playing]));a.deepEqual(p.next,details(scenes[fired]));
+  a.equal(p.playingSongId,playing===2?1:null);
+ }
+ // A rename outside parsed rows must still refresh play while set stays unchanged.
+ bridge.emit('play',{playing:0,fired:1});await req(port,'/');
+ const setCount=s.events.filter(e=>e.startsWith('event: set')).length;
+ const renamed=scenes.map(scene=>scene.index===0?{...scene,name:'New count in',color:9}:scene);
+ bridge.emit('scenes',renamed);await req(port,'/');
+ a.equal(s.events.filter(e=>e.startsWith('event: set')).length,setCount);
+ a.deepEqual(plays().at(-1).current,details(renamed[0]));
+ a.deepEqual(plays().at(-1).next,details(scenes[1]));
+ const retitled=renamed.map(scene=>scene.index===1?{...scene,name:'* New song',color:10}:scene);
+ bridge.emit('scenes',retitled);await req(port,'/');
+ a.deepEqual(plays().at(-1).next,details(retitled[1]));
+ bridge.emit('play',{playing:1,fired:2});
+ const moved=retitled.map(scene=>scene.index===1?{...scene,name:'* Final song'}:scene);
+ bridge.emit('scenes',moved);await req(port,'/');
+ a.deepEqual(plays().at(-1).current,details(moved[1]));
+ const later=stream(port);t.after(()=>later.request.destroy());await later.ready;await req(port,'/');
+ a.deepEqual(JSON.parse(later.events.find(e=>e.startsWith('event: play')).split('data: ')[1]),plays().at(-1));
+ bridge.emit('play',{playing:-1,fired:-1});await req(port,'/');
+ a.deepEqual(plays().at(-1),{playing:-1,fired:-1,playingSongId:null,current:null,next:null});
+ bridge.emit('play',{playing:0,fired:1});bridge.emit('scenes',[]);await req(port,'/');
+ a.equal(plays().at(-1).current,null);a.equal(plays().at(-1).next,null);
+});
