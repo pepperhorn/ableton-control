@@ -20,12 +20,13 @@ Players also want to hear effects in their ears, for example wet vocals, using t
 
 ## Add player
 - **Where:** a form on the admin page (`#admin`, from 0009).
-- **Fields:** name; Ext. Out output, chosen from what Live offers.
+- **Fields (my call):** player name; send name, which starts as the player name and can be changed (for example `Horns IEM`, or two players sharing one mix); Ext. Out output, chosen from what Live offers.
+- **Existing member:** picking a name that's already a member updates that member and adds the mix. It never creates a duplicate.
 - **Result:** the device creates a return named exactly as entered, or links an existing return with that name; sets its output; adds the member with `monitor` and that mix (the 0009 default). If access control was off, adding the member turns it on, as 0009 defines.
 - **Existing return:** its routing is shown and only changes if the admin picks a different output. A return routed to Main can't be linked as a player; the form says so.
 - **Output choices:** read from Live for a return track: output type list, then channel list. Only external outputs are offered. If none are available, the form explains that outputs must be enabled in Live's audio preferences.
 - **Outputs already in use:** shown with the return using them, not hidden, because two players may share a pair (my call).
-- **Failure:** a clear message and no half-finished player. If routing fails after the return is created, the return stays and the form says what to fix; the member isn't added.
+- **Failure (my call):** a clear message and no half-finished player. If routing fails after the return is created, the return stays and the member isn't added. The form tells the admin to set that return's output in Live, then press Add again, which links it. Until then the return is on Main, so it shows as an effect row; that's accepted for this rare case. The form never re-routes a return that's on Main, so it can't convert the house reverb.
 - **Limit:** Live allows 12 returns. At the limit, the form says so.
 
 ## Effects in a player's mix
@@ -70,6 +71,9 @@ From memory of Live's API, not tested in the user's set:
 1. `create_return_track` on the song, setting a return's name and `output_routing_type` / `output_routing_channel`, and `available_output_routing_types` / `..._channels`.
 2. Whether `mixer_device sends` on a return track is readable and writable, and whether a disabled send can be detected.
 3. Whether undo steps can be grouped.
+4. How a return's `sends` are indexed: if its own slot is skipped, effect sends can't use the positional scheme track sends use, and could write to the wrong player. Whether a disabled send's state can be observed, so a row recovers without a re-read.
+5. Whether Ext. Out channels can be read before any return is on Ext. Out, without changing the set (for example from `master_track`). If not, the form creates the return first, then offers channels.
+6. A create, name and read-back round trip: does Live report the name exactly as entered, or with a letter prefix? Return names identify mixes in 0009 permissions. If a prefix appears, matching must normalise it.
 
 A small throwaway check device or Max console script should prove these on a scratch set, with the user running it, before the build is dispatched. If effect sends can't be written, that part of the design comes back to the user.
 
