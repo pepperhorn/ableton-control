@@ -9,7 +9,7 @@ export function createPlayerRenderer({refresh}) {
     try { matched = known ? matchReturn(known.returns,fields.sendName.value.trim()) : null; }
     catch (e) { matched = null; existing.textContent = e.message; return; }
     const ret = matched;
-    existing.textContent = ret ? 'Existing return: ' + (ret.type && ret.type.display_name || 'Unknown routing') + (ret.channel ? ' · ' + ret.channel.display_name : '') + '. Keep current output unless you choose another.' : '';
+    existing.textContent = ret ? 'Existing return: ' + ret.name + ' · ' + (ret.type && ret.type.display_name || 'Unknown routing') + (ret.channel ? ' · ' + ret.channel.display_name : '') + '. Keep current output unless you choose another.' : '';
 
   }
   fields.name.oninput = () => { fields.sendName.value = sendNameFor(fields.name.value,fields.sendName.value,edited); confirmed = false; matchExisting(); };
@@ -42,10 +42,10 @@ export function createPlayerRenderer({refresh}) {
         else { confirmed = false; fields.add.textContent = 'Add player'; }
         throw Error(error);
       }
-      const result = await res.json(); message.textContent = 'Player saved. Mix: ' + result.returnName;
+      const result = await res.json(); message.textContent = result.routeKept ? 'Linked existing return; its output was not changed. Mix: ' + result.returnName : 'Player saved. Mix: ' + result.returnName;
       confirmed = false; fields.add.textContent = 'Add player'; await refresh(); await outputs();
     } catch (e) { message.textContent = e.message; }
-    finally { fields.add.disabled = !fields.typeId.options.length; }
+    finally { fields.add.disabled = !known || !known.types.length; }
   };
   return {render(show) { if (show && !loaded) { loaded = true; outputs(); } if (!show) loaded = false; }};
 }

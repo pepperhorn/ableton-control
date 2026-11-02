@@ -47,7 +47,7 @@ function createFakeBridge(rawScenes, rawMix = {returns:[], tracks:[]}, {slowInde
       for (const effect of rawMix.effects) effect.sends[ret.index] = {value:0,label:'-inf dB'};
     }
     if (!existed || value.reroute === true) ret.channel = channels.find(c => c.identifier === value.channelId); bridge.emit('mix',rawMix);
-    return {ok:true,returnName:ret.name};
+    return {ok:true,returnName:ret.name,routeKept:existed && value.explicitOutput === true && value.reroute !== true};
   };
   bridge.setEffectSend = (effectIndex,returnIndex,value) => {
     const effect = rawMix.effects.find(e => e.index === effectIndex);

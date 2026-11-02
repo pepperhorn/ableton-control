@@ -197,7 +197,9 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
             const timeout = new Promise((_,reject) => { timer = setTimeout(() => reject(Error('Live did not reply. Check the return in Live before trying again.')),11000); });
             const current = await Promise.race([bridge.playerOutputs(),removed,timeout]);
             if (!current || !current.ok) return reply(res,409,current && current.message || 'Could not read Live outputs');
-            const existing = matchReturn(current.outputs.returns,value.sendName);
+            let existing;
+            try { existing = matchReturn(current.outputs.returns,value.sendName); }
+            catch (error) { return reply(res,409,error.message.replace(/[.\s]+$/g,'') + '.'); }
             if (!existing && (value.explicitOutput !== true || !value.typeId || !value.channelId)) return reply(res,400,'Choose an explicit output before adding a new return');
             if (value.reroute === true) {
               const seen = value.expectedRouting;
@@ -213,8 +215,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
             if (!member.mixes.includes(result.returnName)) member.mixes.push(result.returnName);
             if (!validMembers(members)) return reply(res,409,'Member limit reached; return remains in Live');
             const next = {...cfg,members,accessEnabled:cfg.accessEnabled || cfg.members.length === 0};
-            await saveConfig(next); cfg = next; broadcast('access',null); return json(res,{returnName:result.returnName});
-          } catch (e) { return reply(res,409,e.message + ' No member was added. Check the return in Live.'); }
+            await saveConfig(next); cfg = next; broadcast('access',null); return json(res,{returnName:result.returnName,routeKept:result.routeKept === true});
+          } catch (e) { return reply(res,409,e.message.replace(/[.\s]+$/g,'') + '. No member was added. Check the return in Live.'); }
           finally { clearTimeout(timer); rejectPlayer = null; adding = false; changing = false; }
         }
       }

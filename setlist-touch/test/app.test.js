@@ -431,3 +431,30 @@ test('stale reroute refused at server; unchanged routing forwarded only with exp
  expectedRouting.channelId='5/6';a.equal((await req(port,'/api/players',{...playerBody,reroute:true,expectedRouting})).status,200);a.equal(calls,1);
  a.equal((await req(port,'/api/players',{...playerBody,explicitOutput:false,typeId:'',channelId:''})).status,200);a.equal(calls,2);
 });
+
+test('server A Gtr does not alias E Gtr, and ambiguous lookup is its own punctuated 409 before add',async t=>{
+ const {port,bridge,saved}=await setup(t);let calls=0;
+ bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[{index:1,name:'E Gtr'}]}});
+ bridge.addPlayer=async value=>{calls++;a.equal(value.sendName,'A Gtr');return {ok:true,returnName:'D-A Gtr'};};
+ a.equal((await req(port,'/api/players',{...playerBody,name:'A Gtr',sendName:'A Gtr'})).status,200);a.deepEqual(saved[0].members[0].mixes,['D-A Gtr']);a.equal(calls,1);
+ bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[{name:'A-Gtr'},{name:'B-Gtr'}]}});
+ const result=await req(port,'/api/players',{...playerBody,sendName:'Gtr'});a.equal(result.status,409);a.equal(result.data,'More than one return has that name.');a.equal(calls,1);
+});
+test('authoritative Live result reports a late link whose explicitly requested output was kept',async t=>{
+ const {port,bridge}=await setup(t);bridge.addPlayer=async()=>({ok:true,returnName:'C-New mix',routeKept:true});
+ const result=await req(port,'/api/players',playerBody);a.equal(result.status,200);a.equal(JSON.parse(result.data).routeKept,true);
+ // A preflight match may disappear before Max; do not infer the actual result from preflight.
+ bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[{name:'C-New mix'}]}});bridge.addPlayer=async()=>({ok:true,returnName:'D-New mix',routeKept:false});
+ a.equal(JSON.parse((await req(port,'/api/players',playerBody)).data).routeKept,false);
+});
+for(const key of ['index','name','typeId','channelId'])test('server reroute regression refuses stale '+key+' before Live add',async t=>{
+ const {port,bridge}=await setup(t);const ret={index:1,name:'D-New mix',type:{identifier:'ext'},channel:{identifier:'3/4'}};
+ bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[ret]}});let calls=0;bridge.addPlayer=async()=>{calls++;return {ok:true,returnName:ret.name};};
+ const expectedRouting={index:1,name:ret.name,typeId:'ext',channelId:'3/4'};expectedRouting[key]=key==='index'?9:'stale';
+ a.equal((await req(port,'/api/players',{...playerBody,reroute:true,expectedRouting})).status,409);a.equal(calls,0);
+});
+test('server refuses A Gtr reroute even with a genuine observed E Gtr route',async t=>{
+ const {port,bridge}=await setup(t);const ret={index:1,name:'E Gtr',type:{identifier:'ext'},channel:{identifier:'3/4'}};bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[ret]}});let calls=0;bridge.addPlayer=()=>calls++;
+ const expectedRouting={index:1,name:ret.name,typeId:'ext',channelId:'3/4'};
+ a.equal((await req(port,'/api/players',{...playerBody,sendName:'A Gtr',reroute:true,expectedRouting})).status,409);a.equal(calls,0);
+});

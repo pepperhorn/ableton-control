@@ -30,7 +30,7 @@ Read the linked spec, plan and dispatch. No relevant GBrain project pages were f
 - [x] Admin kind only for setup routes, including open-access phones; foreign Origin refused: app tests.
 - [x] Effect full-list / skip-own mappings, unknown-layout omission with diagnostic, final IDs/names/routing checks: mix harness tests.
 - [x] Create failure causes no subsequent writes; routing failure retains return; manual route recovery links without duplicate creation: players harness.
-- [x] Name readback, including simulated prefix, scopes member to actual name: players and app tests. Return lookup now trims, prefers exact matches, then strips a leading A–L letter plus hyphen/space and rejects ambiguous aliases. Stored permission comparison remains exact against Live readback.
+- [x] Name readback, including simulated prefix, scopes member to actual name: players and app tests. Return lookup trims and prefers exact matches; only the Live candidate may lose one leading A–L letter plus hyphen/space. The admin’s typed name is never prefix-stripped. Ambiguous aliases fail closed. Stored permission comparison remains exact against Live readback.
 - [x] Existing Main refusal and existing external no-op routing: players harness; browser form displays existing routing and selects it.
 - [x] Case-insensitive existing-member update, no duplicate, access enablement: app tests.
 - [x] Concurrent add refused; 11-second application timeout clears lock and ignores late success; removal rejects pending add: app tests. Max bridge also has a 10-second timeout.
@@ -50,10 +50,10 @@ python3 device/build_device.py
 ```
 Final test output:
 ```text
-1..214
-# tests 214
+1..244
+# tests 244
 # suites 0
-# pass 214
+# pass 244
 # fail 0
 # cancelled 0
 # skipped 0
@@ -80,8 +80,8 @@ At both sizes: add new player, link same player, Main return refusal, simulated 
 
 ## Live-only checks and API assumptions
 1. **Create/name/readback:** Song.call('create_return_track') appends one return; return name is writable and readable as a symbol. Verify exact actual name and any prefix; members use the returned name. Confirm the return_tracks observer fires and the mix rebuild finishes before new faders become writable.
-2. **Routing:** available_output_routing_types/channels and output_routing_type/channel are JSON objects/lists, either directly encoded or under a same-name wrapper. Entries have identifier/display_name; setters accept the JSON-encoded selected object. Verify supported Live version, channel ordering, same-output no-op and different-output change. Unexpected results stop further setup and do not save a member.
-3. **Discovery before first external return:** output types may be readable on master_track when no returns exist; channels are read only from an external return/master. No temporary routing is performed for discovery. Verify empty set behavior; if channels cannot be read, configure an external return in Live before using Add. The lead explicitly removed create-to-discover fallback.
+2. **Routing:** available_output_routing_types/channels and output_routing_type/channel are JSON objects/lists, either directly encoded or under a same-name wrapper. Entries have identifier/display_name; setters accept the JSON-encoded selected object. Verify supported Live version, channel ordering, same-output no-op and an explicit reroute actually moving the output. The options JSON travels through node.script, route, deferlow and js; this argument path still needs a real Live check. Also compare Main/return channel identifiers and display names; labels accept either match while writes retain the chosen return identifier. Unexpected results stop further setup and do not save a member.
+3. **Discovery before first external return:** when no external return supplies channels, including sets with only effect returns, read available_output_routing_channels from external master_track without changing routing. Only arrays are accepted. Verify empty and effect-only sets; when no channels can be read, the form tells the admin to route one return to Ext. Out in Live and refresh. Channels offered by master may differ from a newly created return’s own list: the new return validates its own list after creation; mismatch must leave the return and report failure without saving a member. The lead explicitly removed create-to-discover fallback.
 4. **Return sends:** mixer_device.getcount('sends') and per-parameter name/value/str_for_value are readable. Full count maps positionally; count-minus-one skips the effect's own slot. Verify the printed count/name diagnostic against the actual target channels before audio use. Unknown layouts fail closed. Confirm return send value is writable and observes external changes.
 5. **Undo:** begin_undo_step/end_undo_step on live_set may be unsupported. Verify one undo step when supported and graceful fallback otherwise. No return is deleted automatically, including on failure.
 6. **Audio/performance:** adding while playing must not stutter; effect → player sends must change only that player's external output, with house sound unaffected. Verify enabled sends, real interface routing, twelve-return behavior and the actual send taper/labels. Disabled sends remain the user's Live setting; no detection or note was added.
@@ -92,7 +92,7 @@ None blocking local implementation. Cross-family review and user Live checks are
 
 ## Return
 - **Outcome:** done (local implementation); Live-only acceptance pending as above.
-- **Verification:** 214/214 tests, deterministic build, scope audit and browser checks passed.
+- **Verification:** 244/244 tests, deterministic build, scope audit and browser checks passed.
 - **Out-of-scope issues found:** existing Node 16 test-runner limitations; no unrelated fixes.
 - **Follow-ups:** cross-family PR review; run the complete Live-only checklist before live use.
 - **For GBrain (lead to promote):** result Dict lifetime needs explicit retention until Node reads; effect send mappings must be proved by return-send count and rejected when unknown; fixture setup should not save personal config. Promote only after review/merge with the final PR link.
@@ -117,3 +117,25 @@ Verification: **214 tests passed**, zero failed on Node 22.22.1; ES5 guards and 
 Headless Chromium against the memory-only dev fixture at **1280×800** and **390×844** verified: blank output causes zero add requests; explicit 3/4 selection creates; output resets blank after success; link sends explicitOutput:false / reroute:false; ` Shaun ` matches the existing return; a separate admin route change makes the stale form receive 409. Main is labelled, controls are >=44 px high, no horizontal overflow or page errors. The disabled informational Main entry is also unit tested. Browser and fixture process were closed after verification.
 
 Live-only gates above remain unchanged in status: APIs, physical audio isolation, undo, performance and Windows/phone behavior have not been verified in Ableton. No GBrain project page was used or written; the lead owns writeback after review/merge.
+
+
+## Revision after Opus r2 — 2026-11-02
+
+Responds to review [5731434250](https://github.com/pepperhorn/ableton-control/pull/8#pullrequestreview-5731434250) on 8f1da7a. All six findings addressed, **none skipped**. The lead identified this as the last implementation round before escalation; I rechecked the matchers and routing paths myself and did not dispatch another agent.
+
+1. **Blocker / matcher identity:** exact-first matching remains, but prefix removal now applies only to Live names in Max, server and browser. `A Gtr` never matches `E Gtr`; with `A Gtr` and `E Gtr` present, `B Gtr` remains new. `A Gtr` still links a prefixed `D-A Gtr`, including repeated Add. Exact names still win, bare `Keith` still finds `D-Keith`, bare `Verb` still reaches and refuses Main return `A-Verb`, and ambiguous aliases fail closed. The form explicitly displays the actual matched return name before any POST.
+2. **Medium / channels:** missing return channels now fall back to external master_track even when effect returns exist. Reads never change the set; only array channel lists are published. An unreadable current Main channel does not prevent available-channel discovery. Missing, null, object or scalar lists leave channels empty. The warning explicitly says Live did not provide channels and directs the admin to route one return to Ext. Out in Live, then refresh. Live-only check 3 now covers master/new-return list mismatches and the retained-return failure case.
+3. **Low / Main label:** channel labels compare opaque identifiers OR nonempty display names. Main `1/2` with a different identifier labels the actual return option; it does not add a false duplicate unavailable entry or replace the return’s identifier.
+4. **Low / ambiguity:** server lookup ambiguity returns its own punctuated 409 before add, without inaccurate recovery advice. Generic attempted-add errors also gain proper punctuation.
+5. **Low / Add availability:** submit finally restores disabled state from known output types, not the length of a select containing a blank option. A renderer test reproduces the old blank-option case and confirms Add remains disabled.
+6. **Low / kept output feedback:** the Live keep-route branch reports routeKept for an explicit choice that was not a reroute. The bridge and server preserve that authoritative result, including a return appearing after preflight; the form says `Linked existing return; its output was not changed.` The fake bridge models this too. The server does not infer the final route result from a potentially outdated preflight snapshot.
+
+### Self-check and regression evidence
+
+- Max/server/browser matcher tests use the exact `A Gtr` versus `E Gtr` case and cover unilateral prefixes, exact precedence, ambiguous aliases and Main refusal. A forged reroute carrying the real observed `E Gtr` routing but typed `A Gtr` is refused, with no write, by both server and Max.
+- Rechecked successful explicit reroute, default keep, stale index/name/type/channel, missing intent, missing explicit choice, blank channel, removed target, Main target, unknown route and malformed options JSON. Server stale cases do not call add; Max failure cases do not write. Existing identifier-zero, prefix retry, no-explicit-output creation refusal, timeout/removal, readback and effect-send tests still pass.
+- New DOM renderer test confirms the matched return is named before POST, a different initial does not set reroute intent, empty types keep Add disabled after submit, and late-link feedback explains unchanged output.
+- **244 tests pass, 0 fail** on Node 22.22.1, including ES5 and operation-budget checks. Device build is byte-identical; git diff --check passes. No dependency or generated artifact changes.
+- Headless Chromium at **1280×800** and **390×844** rechecked blank output / zero-request refusal, explicit create, keep-route link, named match, and stale-reroute 409. Additional checks created `A Gtr` on 5/6 while `E Gtr` stayed on 3/4; both viewport runs showed named matches and late-link unchanged-output feedback, kept the late return on 3/4 despite the form’s 5/6 choice, and kept Add disabled with no types. No horizontal overflow, controls >=44 px, no page errors in the main regression run. Browser and fixture server closed afterward.
+
+Only the previously documented real Live API, physical audio, undo, performance and Windows/phone gates remain. No GBrain project page used or written; no scope exception or skipped finding to escalate from this local pass. The lead retains final review/escalation authority.

@@ -62,7 +62,7 @@ module.exports = {adminToken,validMembers,normalizeAccess,sign,verify,identify,c
 function matchReturn(returns, name) {
   const trim = value => value.trim(), normalized = value => trim(value).replace(/^[A-L][- ]/, '');
   const exact = returns.filter(r => trim(r.name) === trim(name));
-  const matches = exact.length ? exact : returns.filter(r => normalized(r.name) === normalized(name));
+  const matches = exact.length ? exact : returns.filter(r => normalized(r.name) === name.trim());
   if (matches.length > 1) throw Error('More than one return has that name');
   return matches[0] || null;
 }

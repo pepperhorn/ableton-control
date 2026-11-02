@@ -48,12 +48,15 @@ function outputs(id) {
         // Main output is informational; discovery never changes its route.
         try {
             var master = new LiveAPI('live_set master_track'); apis.push(master);
-            var mainType = read(master, 'output_routing_type'), mainChannel = read(master, 'output_routing_channel');
-            result.main = {name:'Main', type:mainType, channel:mainChannel};
-            if (!count) {
+            var mainType = read(master, 'output_routing_type');
+            try { result.main = {name:'Main', type:mainType, channel:read(master, 'output_routing_channel')}; } catch (e) {}
+            if (!result.types.length) try {
                 var offered = read(master, 'available_output_routing_types');
                 if (Array.isArray(offered)) result.types = offered.filter(external);
-                if (external(mainType)) result.channels = read(master, 'available_output_routing_channels');
+            } catch (e) {}
+            if (!result.channels.length && external(mainType)) {
+                var masterChannels = read(master, 'available_output_routing_channels');
+                if (Array.isArray(masterChannels)) result.channels = masterChannels;
             }
         } catch (e) {}
         report(id, {ok:true, outputs:result});
@@ -76,7 +79,7 @@ function add(id, name, typeId, channelId, optionsJSON) {
             var candidate = new LiveAPI('live_set return_tracks ' + i); apis.push(candidate);
             var found = nameOf(candidate);
             if (trimmed(found) === name) exact.push({api:candidate,index:i});
-            if (normalized(found) === normalized(name)) aliases.push({api:candidate,index:i});
+            if (normalized(found) === name) aliases.push({api:candidate,index:i});
         }
         var matches = exact.length ? exact : aliases;
         if (matches.length > 1) throw Error('More than one return has that name');
@@ -89,7 +92,7 @@ function add(id, name, typeId, channelId, optionsJSON) {
                 if (options.explicitOutput !== true || String(typeId) === '' || String(channelId) === '') throw Error('Choose an explicit output before rerouting');
                 var expected = options.expectedRouting, oldChannel = read(api, 'output_routing_channel');
                 if (!expected || expected.typeId === undefined || expected.channelId === undefined || expected.typeId === null || expected.channelId === null || expected.index !== index || expected.name !== nameOf(api) || String(expected.typeId) !== String(oldRoute.identifier) || String(expected.channelId) !== String(oldChannel.identifier)) throw Error('Return routing changed; refresh outputs and choose again');
-            } else { report(id, {ok:true, returnName:nameOf(api)}); return; }
+            } else { report(id, {ok:true, returnName:nameOf(api), routeKept:options.explicitOutput === true}); return; }
         } else if (options.reroute === true) throw Error('Return changed; refresh outputs and choose again');
         else if (options.explicitOutput !== true || String(typeId) === '' || String(channelId) === '') throw Error('Choose an explicit output before adding a new return');
         else if (count === 12) throw Error('Live allows 12 returns. Link an existing player return.');
