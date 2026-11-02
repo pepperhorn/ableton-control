@@ -1,6 +1,6 @@
 # Add player and effects in in-ear mixes (Setlist Touch)
 
-Date: 2026-11-01 · Status: draft, awaiting user approval
+Date: 2026-11-01 · Status: approved (user, 2026-11-02: "build it")
 Ledger: 0011
 Builds on: in-ear mix pages (0002), large-set work (0005, 0007), band members and access (0009), all merged under `setlist-touch/`.
 
@@ -35,7 +35,7 @@ Players also want to hear effects in their ears, for example wet vocals, using t
 - **Default level:** off, until someone raises it. Nothing changes in anyone's ears on its own.
 - **Same fader behaviour** as track rows: horizontal slide, relative, tap never changes a level, lock respected, Live's value text at the right, two-way sync.
 - **Same permission:** having a player's mix permission covers its effect rows.
-- **A return's send may be disabled in Live.** Live keeps sends on return tracks switched off until they're enabled in Live, and a device probably can't enable them. If a row can't take effect, it shows a short note saying which send to enable in Live, rather than a fader that silently does nothing. How to detect this is the first thing to prove in Live (see Risks).
+- **A return's send may be disabled in Live (user decision, 2026-11-02):** the user manages this in Live's UI. The app doesn't detect it and shows no note. A fader on a disabled send moves but has no effect until the send is enabled in Live. The README says so.
 - **No feedback loops, by construction:** only effect → player sends are ever written. Player returns never send anywhere, and effect → effect sends are never exposed.
 
 ## Safety
@@ -58,7 +58,7 @@ Item 0010: a server restart resets a player's saved mix tab, which can land them
 ## Anti-goals
 - A phone fader changes what the audience hears.
 - A half-created player that looks finished.
-- An effect row that moves but does nothing.
+- An effect row that writes to the wrong player's return.
 - Anything here stutters Live, or blocks during a show without warning.
 
 ## Constraints
@@ -66,17 +66,15 @@ Item 0010: a server restart resets a player's saved mix tab, which can land them
 - Live writes happen on the deferred path and re-check targets at the final boundary, as `send` does.
 - Reads of the output lists happen only when the admin form is open, not on startup.
 
-## Risks (prove in Live first)
-From memory of Live's API, not tested in the user's set:
+## Risks (user checks in Live after the build)
+From memory of Live's API, not tested in the user's set. The user chose to build without a separate throwaway check first, so the build must fail safe on each of these:
 1. `create_return_track` on the song, setting a return's name and `output_routing_type` / `output_routing_channel`, and `available_output_routing_types` / `..._channels`.
-2. Whether `mixer_device sends` on a return track is readable and writable, and whether a disabled send can be detected.
+2. Whether `mixer_device sends` on a return track is readable and writable.
 3. Whether undo steps can be grouped.
-4. How a return's `sends` are indexed: if its own slot is skipped, effect sends can't use the positional scheme track sends use, and could write to the wrong player. Whether a disabled send's state can be observed, so a row recovers without a re-read.
+4. How a return's `sends` are indexed: if its own slot is skipped, effect sends can't use the positional scheme track sends use, and could write to the wrong player. If the mapping can't be proved, the row isn't offered.
 5. Whether Ext. Out channels can be read before any return is on Ext. Out, without changing the set (for example from `master_track`). If not, the form creates the return first, then offers channels.
 6. A create, name and read-back round trip: does Live report the name exactly as entered, or with a letter prefix? Return names identify mixes in 0009 permissions. If a prefix appears, matching must normalise it.
 
-A small throwaway check device or Max console script should prove these on a scratch set, with the user running it, before the build is dispatched. If effect sends can't be written, that part of the design comes back to the user.
-
 ## Left to the builder
 - Exact routes, messages and event shapes, following existing patterns.
-- The form's layout, with contextual class names (`add-player`, `add-player-output`, `add-player-warning`, `mix-effect-row`, `mix-effect-note`) and Poppins.
+- The form's layout, with contextual class names (`add-player`, `add-player-output`, `add-player-warning`, `mix-effect-row`) and Poppins.

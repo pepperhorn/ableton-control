@@ -3,7 +3,7 @@
 > Single writer: the **lead**, on the main branch only. Implementers report status through their return handoff.
 > Status: proposed · specced · planned · dispatched · in-review · changes-requested · ready · merged · closed · blocked · parked
 
-Next ID: 0011
+Next ID: 0012
 
 ## Active
 
@@ -16,7 +16,8 @@ Next ID: 0011
 | 0003 | Transport header | https://github.com/pepperhorn/ableton-control/pull/3 | 2026-10-29 (squash of reviewed bfd084a) | Opus approved r2. Optional: extra lost-pointer safeguard (transport-render.js:66). Verify in Live: get_current_beats_song_time format, play/stop idempotence, Arrangement Record toggle. |
 | 0002 | In-ear mix pages (phase 2) | https://github.com/pepperhorn/ableton-control/pull/2 | 2026-10-29 (22b634a, squash of reviewed cd24b83) | Opus approved r2. Optional nits: late mid-drag echo or cancel() clears release hold early. Needs user verification in Live 12/Windows: routing JSON and Main/Master name, echo latency vs 1 s hold, send labels, touch. |
 | 0001 | Setlist Touch (phase 1) | https://github.com/pepperhorn/ableton-control/pull/1 | 2026-10-29 (e2bc976, squash of reviewed a3f2853) | Opus approved r2. Minor follow-ups folded into 0002: Space blocked in settings inputs; extra LiveAPI reads per position update; empty set shows Reconnecting. Needs user verification in Live on Windows (touch in jweb, END-row empty name, window open/resize). |
-| 0010 | 0009 review follow-ups: server restart resets a saved mix tab (can land a player on another in-ear mix; also on main before 0009); stale .damaged copy makes the warning wrong; damaged-config warning should say restart | proposed | — | — | — | — | — | — | — | — | 2026-10-31 |
+| 0011 | Add player and effects in in-ear mixes (includes 0010) | dispatched | codex/gpt-6.1-sol | orch/0011-add-player | — | — | — | docs/superpowers/specs/2026-11-01-add-player-and-effects-design.md | docs/plans/0011-add-player-and-effects.md | docs/handoffs/2026-11-02-0011-add-player--lead-to-codex.md | 2026-11-02 |
+| 0010 | 0009 review follow-ups: server restart resets a saved mix tab (can land a player on another in-ear mix; also on main before 0009); stale .damaged copy makes the warning wrong; damaged-config warning should say restart | folded into 0011 | — | — | — | — | — | — | — | — | 2026-11-02 |
 | 0006 | "Build timing clips" button: fill empty slots on the device's own track with empty MIDI clips sized from [N32]-style tags or a chosen reference track; one undo step; skips existing clips (delete a clip + rerun = regen); device track becomes the timing track | proposed (after 0005) | — | — | — | — | — | — | — | — | 2026-10-29 |
 | 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
 
@@ -27,6 +28,8 @@ Next ID: 0011
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-11-02 0011 →dispatched — user: "build it"; disabled sends left to Ableton UI (no detection or note); no pre-build Live check, build fails safe; Sol in worktree
+2026-11-02 0010 proposed→folded into 0011
 2026-10-31 0010 →proposed — Opus r3 non-blocking findings on PR #7
 2026-10-31 0009 in-review→merged — PR #7; 179 tests on main; GBrain: pending write-back
 2026-10-31 0009 changes-requested→in-review — r3 head da181fd, 179 tests; Opus review r3 (last before escalating)
