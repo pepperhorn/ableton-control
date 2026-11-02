@@ -12,6 +12,9 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   const configWarning = config.configWarning;
   let cfg = normalizeAccess(config), parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
+  let adding = false, rejectPlayer = null;
+  function playerRemoved() { if (rejectPlayer) rejectPlayer(Error('Device removed')); }
+  bridge.on('playerRemoved',playerRemoved);
   const loginAttempts = new Map();
   let indexing = null, rawScenes = new Map();
   function sceneDetails(index) {
@@ -123,6 +126,13 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     const delay = 33 - (Date.now() - entry.last);
     if (delay <= 0) flush(); else if (!entry.timer) entry.timer = setTimeout(flush, delay);
   }
+  function onEffectLevel(level) {
+    if (!level || !Number.isInteger(level.effectIndex) || !Number.isInteger(level.returnIndex) || !Number.isFinite(level.value) || level.value < 0 || level.value > 1) return;
+    const effect = (mix.effects || []).find(e => e.effectIndex === level.effectIndex);
+    if (!effect || !effect.levels[level.returnIndex]) return;
+    effect.levels[level.returnIndex] = {value:level.value,label:typeof level.label === 'string' ? level.label : ''}; mixJSON = JSON.stringify(mix); broadcast('effectLevel',level);
+  }
+  bridge.on('effectLevel',onEffectLevel);
   bridge.on('mix', onMix); bridge.on('level', onLevel);
   bridge.on('scenes', onScenes); bridge.on('play', onPlay); bridge.on('pos', onPos);
   const ping = setInterval(() => { for (const res of clients) res.write(': ping\n\n'); }, 15000);
@@ -166,6 +176,43 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
         if (!checkAdminPassword((value || {}).password,cfg)) return reply(res,403,'Incorrect admin password');
         cookie(adminToken(cfg)); return reply(res,204);
+      }
+      if (route === '/api/player-outputs' || route === '/api/players') {
+        if (identity.kind !== 'admin') return reply(res,403,'Admin required');
+        if (route === '/api/player-outputs' && req.method === 'GET') {
+          const result = await bridge.playerOutputs();
+          return result.ok ? json(res,result.outputs) : reply(res,409,result.message);
+        }
+        if (route === '/api/players' && req.method === 'POST') {
+          let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+          if (!value || !['name','sendName'].every(k => typeof value[k] === 'string' && value[k].trim() && value[k].length <= 200) || !['typeId','channelId'].every(k => typeof value[k] === 'string' && value[k].length <= 200)) return reply(res,400,'Invalid player');
+          if (transport && transport.is_playing && value.confirmPlaying !== true) return reply(res,409,'Live is playing. Confirm adding the player while playing.');
+          if (adding || changing) return reply(res,409,'A player or settings change is already in progress');
+          adding = true; changing = true;
+          let timer;
+          try {
+            const result = await Promise.race([bridge.addPlayer(value),new Promise((_,reject) => { rejectPlayer = reject; }),new Promise((_,reject) => { timer = setTimeout(() => reject(Error('Live did not reply. Check the return in Live before trying again.')),11000); })]);
+            if (!result || !result.ok) return reply(res,409,result && result.message || 'Live did not confirm the player');
+            if (typeof result.returnName !== 'string' || !result.returnName.trim() || result.returnName.length > 200) return reply(res,409,'Live returned an invalid name; no member added');
+            const members = cfg.members.map(m => ({...m,mixes:[...m.mixes]}));
+            let member = members.find(m => m.name.toLowerCase() === value.name.trim().toLowerCase());
+            if (!member) { member = newMember(value.name.trim(),[]); members.push(member); }
+            if (!member.mixes.includes(result.returnName)) member.mixes.push(result.returnName);
+            if (!validMembers(members)) return reply(res,409,'Member limit reached; return remains in Live');
+            const next = {...cfg,members,accessEnabled:cfg.accessEnabled || cfg.members.length === 0};
+            await saveConfig(next); cfg = next; broadcast('access',null); return json(res,{returnName:result.returnName});
+          } catch (e) { return reply(res,409,e.message + ' No member was added. Check the return in Live.'); }
+          finally { clearTimeout(timer); rejectPlayer = null; adding = false; changing = false; }
+        }
+      }
+      if (route === '/api/effect-send' && req.method === 'POST') {
+        let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+        const ret = value && mix.returns.find(r => r.returnIndex === value.returnIndex);
+        if (!ret || !can(identity,'send',ret.name)) return reply(res,403,'Mix not allowed');
+        if (!Number.isInteger(value.effectIndex) || typeof value.value !== 'number' || !Number.isFinite(value.value) || value.value < 0 || value.value > 1) return reply(res,400,'Invalid send');
+        const effect = (mix.effects || []).find(e => e.effectIndex === value.effectIndex);
+        if (!effect || effect.rawName !== value.rawName || ret.name !== value.returnName || !effect.levels[ret.returnIndex]) return reply(res,409,JSON.stringify({mix}),'application/json');
+        bridge.setEffectSend(value.effectIndex,ret.returnIndex,value.value); return reply(res,204);
       }
       if (route === '/api/members') {
         // Open access is not authority to administer the band from a phone.
@@ -279,6 +326,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     getConfig() { return {...cfg}; },
     async close() {
       if (closed) return; closed = true; clearInterval(ping); clearTimeout(posTimer); clearTimeout(transportTimer);
+      playerRemoved(); bridge.removeListener('playerRemoved',playerRemoved);
+      bridge.removeListener('effectLevel',onEffectLevel);
       bridge.removeListener('transport', onTransport);
       bridge.removeListener('progress', onProgress);
       bridge.removeListener('mix', onMix); bridge.removeListener('level', onLevel);

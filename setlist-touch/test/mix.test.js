@@ -52,7 +52,7 @@ test('mix is lazy, selects literal prefix, reads labels and observes external se
   const raw=JSON.parse(h.dict.mix);a.equal(raw.tracks.length,9);a.equal(raw.returns.length,5);a.equal(raw.returns[0].routedToMain,true);
   a.equal(raw.tracks[0].sends[2].label,require('../device/lib/fixture-mix.json').tracks[0].sends[2].label);
   a.equal(h.observers.filter(o=>o.id&&o.property==='value').length,27);
-  a.equal(h.tasks.length,3);a.ok(h.tasks.every(t=>!t.repeating));a.deepEqual(h.logs,[]);
+  a.equal(h.tasks.length,3);a.ok(h.tasks.every(t=>!t.repeating));a.equal(h.logs.filter(l=>l.includes('effect sends unavailable')).length,2);
 });
 test('routing handles Main/Master case-insensitively, invalid routing fails closed',()=>{
   const h=harness();h.ctx.refresh();h.flush();
@@ -268,4 +268,36 @@ test('any change to the return list rejects sends, even to an untouched return s
  h.ctx.send(0,3,0.7,'+ Track 0','Return 3');a.equal(h.writes.length,1);
  h.data.live_set.return_tracks[1]=999;
  h.ctx.send(0,3,0.8,'+ Track 0','Return 3');a.equal(h.writes.length,1);
+});
+
+for (const shape of ['all','skip','unknown']) test('effect sends map '+shape+' shape with final safety checks and bounded retirement',()=>{
+ const h=harness(); const n=shape==='all'?5:shape==='skip'?4:2;
+ for(let i=0;i<2;i++) {
+   h.data[`live_set return_tracks ${i} mixer_device`]={sends:Array.from({length:n},(_,j)=>['id',500+j]).flat()};
+   for(let j=0;j<n;j++) h.data[`live_set return_tracks ${i} mixer_device sends ${j}`]={name:'Send '+j,value:0,label:'-inf dB'};
+ }
+ h.ctx.refresh();h.flush();const raw=JSON.parse(h.dict.mix);
+ if(shape==='unknown'){a.equal(raw.effects.length,0);a.equal(h.logs.filter(l=>/count=2.*names=/.test(l)).length,2);return;}
+ a.equal(raw.effects.length,2);a.ok(h.ticks.every(n=>n<=150),Math.max(...h.ticks));
+ h.ctx.effectSend(0,2,0.6,'Wrong effect','Shaun');
+ // Use the actual fixture effect name rather than assuming it.
+ h.ctx.effectSend(0,2,0.6,raw.returns[0].name,'Shaun');
+ a.equal(h.writes.length,1);a.equal(h.writes[0][0],`live_set return_tracks 0 mixer_device sends ${shape==='all'?2:1}`);
+ h.flush();a.ok(h.out.some(o=>o[1]==='effectLevel'&&o[2]===0&&o[3]===2));
+ for(const change of ['name','route','ids']) {
+   const effect=h.data['live_set return_tracks 0'];const saved={...effect};const ids=[...h.data.live_set.return_tracks];
+   if(change==='name')effect.name='Changed';if(change==='route')effect.output_routing_type=JSON.stringify({display_name:'Ext. Out'});if(change==='ids')h.data.live_set.return_tracks[1]=999;
+   h.ctx.effectSend(0,2,0.8,raw.returns[0].name,'Shaun');a.equal(h.writes.length,1);
+   Object.assign(effect,saved);h.data.live_set.return_tracks=ids;
+ }
+ h.ctx.effectSend(0,1,0.8,raw.returns[0].name,raw.returns[1].name);a.equal(h.writes.length,1);
+ const old=h.observers.filter(o=>o.path.includes('return_tracks')&&o.property==='value');h.ctx.rebuild();h.flush();a.ok(old.every(o=>!o.id));a.ok(h.ticks.every(n=>n<=150));h.destroy();
+});
+
+test('12 returns with effect and eleven players stay within 150 operations per scan tick',()=>{
+ const h=harness();h.data.live_set.tracks=[];h.data.live_set.return_tracks=Array.from({length:12},(_,i)=>['id',200+i]).flat();
+ for(let i=0;i<12;i++)h.data['live_set return_tracks '+i]={name:'Return '+i,color:0,output_routing_type:JSON.stringify({display_name:i?'Ext. Out':'Main'})};
+ h.data['live_set return_tracks 0 mixer_device']={sends:Array.from({length:12},(_,i)=>['id',500+i]).flat()};
+ for(let i=0;i<12;i++)h.data['live_set return_tracks 0 mixer_device sends '+i]={name:'Send '+i,value:0,label:'-inf dB'};
+ h.ctx.refresh();h.flush();a.equal(h.ctx.snapshot.effects.length,1);a.equal(Object.keys(h.ctx.snapshot.effects[0].sends).filter(k=>h.ctx.snapshot.effects[0].sends[k]).length,11);a.ok(h.ticks.every(n=>n<=150),Math.max(...h.ticks));h.destroy();
 });

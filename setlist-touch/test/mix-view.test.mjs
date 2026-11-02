@@ -7,7 +7,7 @@ test('page and tab restore; reconciliation uses return names and falls back',()=
  let state=initialMixState({page:'mix',tab:'Keith'});state=reduceMix(state,{type:'mix'},mix);a.equal(state.tab,'Keith');
  state=reduceMix(state,{type:'mix'},{returns:[{returnIndex:7,name:'Keith'}]});a.equal(state.tab,'Keith');
  state=reduceMix(state,{type:'mix'},{returns:[{name:'Sam'}]});a.equal(state.tab,'Sam');
- state=reduceMix(state,{type:'mix'},{returns:[]});a.equal(state.tab,null);
+ state=reduceMix(state,{type:'mix'},{returns:[]});a.equal(state.tab,'Sam');
  a.equal(reduceMix(state,{type:'page',page:'scenes'},mix).page,'scenes');a.equal(initialMixState({page:'bogus'}).page,'scenes');
  a.deepEqual(prefsOf(initialState(),{page:'mix',tab:'Keith'}),{sidebarOpen:true,locked:false,filter:null,page:'mix',tab:'Keith'});
 });

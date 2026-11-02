@@ -13,6 +13,11 @@ function parseMix(raw = {}) {
       }
       return {trackIndex:t.index, rawName:t.name, name:t.name.slice(2), color:t.color, levels};
     });
-  return {returns, strips};
+  const effects = (raw.effects || []).filter(e => (raw.returns || []).some(r => r.index === e.index && r.routedToMain === true && r.name === e.name)).map(e => {
+    const levels = {};
+    for (const r of returns) { const l = (e.sends || {})[r.returnIndex]; if (l && Number.isFinite(l.value) && l.value >= 0 && l.value <= 1) levels[r.returnIndex] = {value:l.value,label:typeof l.label === 'string' ? l.label : ''}; }
+    return {effectIndex:e.index,rawName:e.name,name:e.name,color:e.color,levels};
+  });
+  return effects.length ? {returns, strips, effects} : {returns, strips};
 }
 module.exports = {parseMix};

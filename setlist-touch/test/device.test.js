@@ -46,7 +46,7 @@ test('transport commands use deferlow and refresh/Node wiring; generator is dete
  const p=JSON.parse(fs.readFileSync(path.join(device,'SetlistTouch.maxpat'))).patcher;
  const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));
  a.equal(boxes['transport-route'].text,'route transport');a.equal(boxes['transport-defer'].text,'deferlow');a.equal(boxes.transport.text,'js transport.js');
- for(const [src,dst,outlet] of [['route','transport-route',6],['transport-route','transport-defer',0],['transport-defer','transport',0],['refresh','transport',0],['transport','node',0]])
+ for(const [src,dst,outlet] of [['route','player-route',6],['player-route','transport-route',2],['transport-route','transport-defer',0],['transport-defer','transport',0],['refresh','transport',0],['transport','node',0]])
   a.ok(p.lines.some(({patchline:l})=>l.source[0]===src&&l.source[1]===outlet&&l.destination[0]===dst));
  const files=['SetlistTouch.maxpat','SetlistTouch.amxd'],before=files.map(f=>fs.readFileSync(path.join(device,f)));
  require('child_process').execFileSync('python3',[path.join(device,'build_device.py')]);
@@ -94,4 +94,11 @@ test('Node ready uses distinct replay messages for all three lanes without trigg
  a.ok(!p.lines.some(({patchline:l})=>l.source[0]==='route'&&l.source[1]===3&&l.destination[0]==='refresh'));
  for(const lane of ['lom','mix','transport'])a.ok(p.lines.some(({patchline:l})=>l.source[0]==='ready'&&l.destination[0]===lane));
  a.ok(p.lines.some(({patchline:l})=>l.source[0]==='thisdevice'&&l.destination[0]==='refresh'));
+});
+
+test('player and effect commands are deferred and preserve selectors through independent lanes',()=>{
+ const p=JSON.parse(fs.readFileSync(path.join(device,'SetlistTouch.maxpat'))).patcher;
+ const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));a.equal(boxes.players.text,'js players.js');a.equal(boxes['player-defer'].text,'deferlow');a.equal(boxes['effect-defer'].text,'deferlow');
+ for(const [src,dst,outlet] of [['route','player-route',6],['player-route','player-defer',0],['player-defer','players',0],['players','node',0],['refresh','players',0],['player-route','effect-defer',1],['effect-defer','effect-send',0],['effect-send','mix',0]])a.ok(p.lines.some(({patchline:l})=>l.source[0]===src&&l.source[1]===outlet&&l.destination[0]===dst));
+ for(const file of ['mix.js','players.js']) { const source=fs.readFileSync(path.join(device,file),'utf8');a.doesNotMatch(source,/\b(?:const|let|class)\s|=>|`/);new vm.Script(source); }
 });

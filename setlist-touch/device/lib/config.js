@@ -33,7 +33,7 @@ function loadConfig(file = configPath()) {
       fs.copyFileSync(file, file + '.damaged', fs.constants.COPYFILE_EXCL);
       backupAvailable = true;
     } catch (_) {
-      try { backupAvailable = fs.statSync(file + '.damaged').isFile(); } catch (_) {}
+      try { backupAvailable = fs.readFileSync(file).equals(fs.readFileSync(file + '.damaged')); } catch (_) {}
     }
     configWarning = {backupAvailable};
     Object.defineProperty(cfg, 'configWarning', {value:configWarning});

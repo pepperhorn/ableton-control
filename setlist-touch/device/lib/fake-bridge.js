@@ -29,6 +29,29 @@ function createFakeBridge(rawScenes, rawMix = {returns:[], tracks:[]}, {slowInde
     bridge.emit('setSend', {trackIndex, returnIndex, value});
     bridge.emit('level', {trackIndex, returnIndex, value, label});
   };
+  rawMix.effects = rawMix.effects || rawMix.returns.filter(r => r.routedToMain === true).map(r => ({index:r.index,name:r.name,color:r.color,sends:Object.fromEntries(rawMix.returns.filter(p => p.routedToMain === false).map(p => [p.index,{value:0,label:'-inf dB'}]))}));
+  const type = {identifier:'external',display_name:'Ext. Out'};
+  const channels = ['1/2','3/4','5/6'].map(identifier => ({identifier,display_name:identifier}));
+  bridge.playerOutputs = async () => ({ok:true,outputs:{types:[type],channels,returns:rawMix.returns.map(r => ({index:r.index,name:r.name,type:r.routedToMain ? {display_name:'Main'} : type,channel:r.routedToMain ? null : r.channel || channels[0]}))}});
+  bridge.addPlayer = async value => {
+    let ret = rawMix.returns.find(r => r.name === value.sendName);
+    if (ret && ret.routedToMain !== false) return {ok:false,message:'This return is routed to Main and cannot be linked as a player.'};
+    if (value.sendName === 'Fail') return {ok:false,message:'Simulated routing failure. Return remains in Live; no member added.'};
+    if (!ret) {
+      if (rawMix.returns.length >= 12) return {ok:false,message:'Live allows 12 returns.'};
+      ret = {index:rawMix.returns.length,name:value.sendName,color:7833753,routedToMain:false}; rawMix.returns.push(ret);
+      for (const track of rawMix.tracks) track.sends[ret.index] = {value:0,label:'-inf dB'};
+      for (const effect of rawMix.effects) effect.sends[ret.index] = {value:0,label:'-inf dB'};
+    }
+    ret.channel = channels.find(c => c.identifier === value.channelId); bridge.emit('mix',rawMix);
+    return {ok:true,returnName:ret.name};
+  };
+  bridge.setEffectSend = (effectIndex,returnIndex,value) => {
+    const effect = rawMix.effects.find(e => e.index === effectIndex);
+    if (!effect || !effect.sends[returnIndex]) return;
+    const label = value === 0 ? '-inf dB' : (20*Math.log10(value)).toFixed(1) + ' dB';
+    effect.sends[returnIndex] = {value,label}; bridge.emit('effectLevel',{effectIndex,returnIndex,value,label});
+  };
   bridge.snapshot = () => {
     emitTransport(); bridge.emit('mix', rawMix);
     if (indexDone) { bridge.emit('scenes', rawScenes); emitPlay(); emitPos(); return; }

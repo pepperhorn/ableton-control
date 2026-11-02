@@ -11,6 +11,31 @@ bridge.setSend = (trackIndex, returnIndex, value) => {
   const ret = lastMix.returns.find(r => r.index === returnIndex);
   if (track && ret) max.outlet('send', trackIndex, returnIndex, value, track.name, ret.name);
 };
+let playerSerial = 0;
+const playerRequests = new Map();
+function playerRequest(command, ...args) {
+  const id = ++playerSerial;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { playerRequests.delete(id); reject(Error('Live did not reply. Check the return in Live before trying again.')); }, 10000);
+    playerRequests.set(id,{resolve,reject,timer}); max.outlet('players',command,id,...args);
+  });
+}
+bridge.playerOutputs = () => playerRequest('outputs');
+bridge.addPlayer = value => playerRequest('add',value.sendName,value.typeId,value.channelId);
+max.addHandler('playerResult', async id => {
+  const entry = playerRequests.get(id); if (!entry) { max.outlet('players','forget',id); return; }
+  try { const dict = await max.getDict('setlist_touch_player_' + id); const result = JSON.parse(dict.result); clearTimeout(entry.timer); playerRequests.delete(id); entry.resolve(result); }
+  catch (_) { clearTimeout(entry.timer); playerRequests.delete(id); entry.reject(Error('Unreadable Live reply')); }
+  finally { max.outlet('players','forget',id); }
+});
+max.addHandler('playerRemoved', () => { for (const entry of playerRequests.values()) { clearTimeout(entry.timer); entry.reject(Error('Device removed')); } playerRequests.clear(); bridge.emit('playerRemoved'); });
+bridge.setEffectSend = (effectIndex, returnIndex, value) => {
+  const effect = (lastMix.effects || []).find(e => e.index === effectIndex), ret = lastMix.returns.find(r => r.index === returnIndex);
+  if (effect && ret) max.outlet('effectSend',effectIndex,returnIndex,value,effect.name,ret.name);
+};
+max.addHandler('effectLevel', (effectIndex, returnIndex, value, ...label) => {
+  mixRead.then(() => bridge.emit('effectLevel',{effectIndex,returnIndex,value,label:label.join(' ')}));
+});
 bridge.transport = (command, value) => command === 'record' ? max.outlet('transport', command, value) : max.outlet('transport', command);
 max.addHandler('transport', (is_playing, record_mode, tempo, current_song_time, signature_numerator, signature_denominator, beats_song_time) => {
   bridge.emit('transport', {is_playing, record_mode, tempo, current_song_time, signature_numerator, signature_denominator, beats_song_time});

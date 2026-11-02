@@ -360,3 +360,56 @@ test('laptop settings report damaged config and a password save retains its reco
  a.equal(fs.readFileSync(file+'.damaged','utf8'),bytes);a.equal(JSON.parse(fs.readFileSync(file)).accessEnabled,true);
  a.deepEqual(JSON.parse((await req(port,'/api/config')).data).configWarning,{backupAvailable:true});
 });
+
+const playerBody={name:'New',sendName:'New mix',typeId:'ext',channelId:'3/4'};
+test('player routes require admin even with access off and reject foreign Origin',async t=>{
+ const {port,bridge}=await setup(t,'192.168.1.20');let called=0;bridge.addPlayer=()=>called++;bridge.playerOutputs=()=>called++;
+ const headers={Authorization:'Basic '+Buffer.from('band:pw').toString('base64')};
+ a.equal((await req(port,'/api/players',playerBody,headers)).status,403);a.equal((await req(port,'/api/player-outputs',undefined,headers)).status,403);a.equal(called,0);
+ const local=await setup(t);a.equal((await req(local.port,'/api/players',playerBody,{Origin:'http://evil'})).status,403);
+});
+test('player add saves readback mix only on success, updates case-insensitive member and enables access once',async t=>{
+ const {port,bridge,saved}=await setup(t);bridge.addPlayer=async()=>({ok:false,message:'Routing failed. Return remains'});
+ a.equal((await req(port,'/api/players',playerBody)).status,409);a.equal(saved.length,0);
+ bridge.addPlayer=async()=>({ok:true,returnName:'D-New mix'});
+ a.equal((await req(port,'/api/players',playerBody)).status,200);a.equal(saved[0].accessEnabled,true);a.deepEqual(saved[0].members[0].mixes,['D-New mix']);
+ a.equal((await req(port,'/api/players',{...playerBody,name:'new'})).status,200);a.equal(saved[1].members.length,1);
+});
+test('player add serializes pending work and confirms current playing state on server',async t=>{
+ const {port,bridge,saved}=await setup(t);bridge.emit('transport',{is_playing:1,record_mode:0,tempo:100,current_song_time:0,signature_numerator:4,signature_denominator:4});
+ let resolve;bridge.addPlayer=()=>new Promise(r=>resolve=r);
+ a.equal((await req(port,'/api/players',playerBody)).status,409);
+ const pending=req(port,'/api/players',{...playerBody,confirmPlaying:true});
+ while(!resolve)await new Promise(r=>setImmediate(r));
+ a.equal((await req(port,'/api/players',{...playerBody,confirmPlaying:true})).status,409);a.equal(saved.length,0);
+ resolve({ok:true,returnName:'New mix'});a.equal((await pending).status,200);
+});
+test('effect permission resolves actual current return and stale names fail closed',async t=>{
+ const {port,bridge}=await setup(t);const raw=JSON.parse(JSON.stringify(require('../device/lib/fixture-mix.json')));
+ raw.effects=[{index:0,name:raw.returns[0].name,color:0,sends:{2:{value:0,label:'-inf dB'}}}];bridge.emit('mix',raw);
+ const writes=[];bridge.setEffectSend=(...v)=>writes.push(v);
+ const command={effectIndex:0,returnIndex:2,rawName:raw.returns[0].name,returnName:raw.returns[2].name,value:0.5};
+ a.equal((await req(port,'/api/effect-send',command)).status,204);
+ a.equal((await req(port,'/api/effect-send',{...command,returnName:'wrong'})).status,409);
+ a.equal((await req(port,'/api/effect-send',{...command,returnIndex:0})).status,403);a.equal(writes.length,1);
+});
+
+test('removed device releases pending player lock without saving or accepting late reply',async t=>{
+ const {port,bridge,saved}=await setup(t);let resolve;bridge.addPlayer=()=>new Promise(r=>resolve=r);
+ const pending=req(port,'/api/players',playerBody);while(!resolve)await new Promise(r=>setImmediate(r));bridge.emit('playerRemoved');
+ const result=await pending;a.equal(result.status,409);a.match(result.data,/Device removed/);resolve({ok:true,returnName:'late'});await new Promise(r=>setImmediate(r));a.equal(saved.length,0);
+ bridge.addPlayer=async()=>({ok:true,returnName:'new'});a.equal((await req(port,'/api/players',playerBody)).status,200);
+});
+test('player timeout releases lock and ignores late Live success',async t=>{
+ const {port,bridge,saved}=await setup(t);let resolve;bridge.addPlayer=()=>new Promise(r=>resolve=r);
+ const pending=req(port,'/api/players',playerBody);const result=await pending;a.equal(result.status,409);a.match(result.data,/did not reply/);a.equal(saved.length,0);
+ resolve({ok:true,returnName:'late'});bridge.addPlayer=async()=>({ok:false,message:'retry reached Live'});a.match((await req(port,'/api/players',playerBody)).data,/retry reached Live/);
+});
+
+test('member cannot forge an effect send to another player by naming their permitted mix',async t=>{
+ const {sign}=require('../device/lib/access');const secret='a'.repeat(64);const bridge=new EventEmitter();const app=createApp({bridge,remoteAddressOf:()=> '192.168.1.2',config:{port:8765,username:'band',password:'pw',accessEnabled:true,members:[{id:'one',name:'Shaun',pages:['monitor'],mixes:['Shaun']}],secret}});
+ const port=await app.listen(0);t.after(()=>app.close());const raw=JSON.parse(JSON.stringify(require('../device/lib/fixture-mix.json')));raw.effects=[{index:0,name:raw.returns[0].name,color:0,sends:{2:{value:0,label:''},3:{value:0,label:''}}}];bridge.emit('mix',raw);
+ const writes=[];bridge.setEffectSend=(...v)=>writes.push(v);const headers={Authorization:'Basic '+Buffer.from('band:pw').toString('base64'),Cookie:'st_id='+sign({kind:'member',memberId:'one'},secret)};
+ const command={effectIndex:0,returnIndex:3,returnName:'Shaun',rawName:raw.returns[0].name,value:0.3};a.equal((await req(port,'/api/effect-send',command,headers)).status,403);a.equal(writes.length,0);
+ a.equal((await req(port,'/api/effect-send',{...command,returnIndex:2},headers)).status,204);a.equal(writes.length,1);
+});

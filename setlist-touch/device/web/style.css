@@ -73,3 +73,5 @@ body[data-page=monitor] .page-switch{margin-right:auto}
 .admin-add-form,.admin-login-form { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0; }
 .admin-label { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
 .settings-config-warning { padding:12px; border:1px solid #b8873d; border-radius:8px; background:#382d1e; color:#ffe0ad; font-size:14px; }
+
+.add-player {display:grid;gap:12px;max-width:650px;padding:18px;border:1px solid #555;border-radius:12px;margin:18px 0;font-family:inherit}.add-player label {display:grid;gap:6px}.add-player input,.add-player select,.add-player button {font:inherit;min-height:44px;max-width:100%;min-width:0}.add-player-warning,.add-player-status {overflow-wrap:anywhere;color:#ffc77c}.mix-effect-row {border-left:4px solid #bca5ef}

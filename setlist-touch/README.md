@@ -144,3 +144,10 @@ missing and reports whether a recovery copy is available. Repair or recover the
 file before saving settings; a save replaces the active damaged contents. If the config
 cannot be written, the laptop still starts with an in-memory signing secret;
 phone identities may need to be selected again after restarting.
+
+### Add player and effects
+Open Admin on the laptop (or sign in as admin on a phone). In Add player and mix, enter the player and send names, choose Ext. Out and an output channel, then Add player. An existing member is updated; an existing external return is linked. Main returns cannot be linked. Outputs already in use show their return names and may be shared. Enable the required interface outputs in Live’s audio preferences first. Live permits 12 returns.
+
+While playing, press Confirm Add while playing after the warning. If Live cannot confirm routing, no member is added; any created return stays. Set its output in Live, refresh outputs and Add again. If channels were unavailable before creation, refresh outputs after the first attempt and choose the channel.
+
+Effects routed to Main appear after track faders in each player mix. They control only the effect return’s send to that player. A return send disabled in Live can move in the app but has no audible effect until you enable that send in Live. Removing a member leaves the return in the set.
