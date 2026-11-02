@@ -48,5 +48,7 @@ None. If a plan detail conflicts with the code, escalate per AGENTS.md §7.
 ---
 ## Receiver ack
 
+Acknowledged: implement T1–T3 on orch/0011-add-player, restricted to the plan-owned setlist-touch files and my 0011 handoffs. Add admin-only fail-safe return setup, effect-to-player faders with final-boundary checks, and the 0010 fixes; validate tests, deterministic build and both browser sizes, then push a draft PR. No open questions. GBrain search returned no relevant project pages; none used. Physical Live API, audio, undo and Windows checks remain explicitly for the user.
+
 ---
 ## Return (implementer → lead; fill in when done, or in a separate …-to-lead.md)

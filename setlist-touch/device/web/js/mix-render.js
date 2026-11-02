@@ -11,11 +11,11 @@ export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, st
   const pointers = new Set(), channels = new Map();
   let gesture = null, dragging = null;
   const holds = createFaderHolds({onExpire:() => updateLevels()});
-  const keyOf = row => `${row.dataset.trackIndex}:${row.dataset.returnIndex}`;
+  const keyOf = row => `${row.dataset.effect === "true" ? "e" : ""}${row.dataset.trackIndex}:${row.dataset.returnIndex}`;
   function selectedReturn() { return mixOf().returns.find(r => r.name === viewOf().tab); }
   function usable() { return viewOf().page === 'mix' && location.hash !== '#settings' && canLaunch(stateOf()); }
   function currentLevel(row) {
-    const strip = mixOf().strips.find(s => s.trackIndex === Number(row.dataset.trackIndex));
+    const strip = (row.dataset.effect === "true" ? mixOf().effects || [] : mixOf().strips).find(s => (row.dataset.effect === "true" ? s.effectIndex : s.trackIndex) === Number(row.dataset.trackIndex));
     return strip && strip.levels[Number(row.dataset.returnIndex)];
   }
   function paint(row, level) {
@@ -26,7 +26,7 @@ export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, st
     row.setAttribute('aria-valuetext', valueLabel(level));
   }
   function updateLevels(echo) {
-    if (echo) holds.echo(`${echo.trackIndex}:${echo.returnIndex}`);
+    if (echo) holds.echo(`${echo.effectIndex === undefined ? '' : 'e'}${echo.effectIndex === undefined ? echo.trackIndex : echo.effectIndex}:${echo.returnIndex}`);
     for (const row of document.querySelectorAll('.mix-row'))
       paint(row, faderValue(currentLevel(row), dragging && dragging.row === row ? dragging.level : null, holds.get(keyOf(row))));
   }
@@ -44,7 +44,7 @@ export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, st
     if (!entry.final && remaining > 0) { entry.timer = setTimeout(() => flush(entry), Math.ceil(remaining)); return; }
     const command = entry.pending; entry.pending = null; entry.inFlight = true; entry.last = performance.now();
     try {
-      const res = await fetch('/api/send', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(command)});
+      const res = await fetch(command.effectIndex === undefined ? '/api/send' : '/api/effect-send', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(command)});
       if (res.status === 409) {
         cancel();
         const data = await res.json(); onSnapshot(data.mix);
@@ -64,10 +64,10 @@ export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, st
   function send(row, value, final = false) {
     if (!usable() || !row.isConnected) return;
     const trackIndex = Number(row.dataset.trackIndex), returnIndex = Number(row.dataset.returnIndex);
-    const key = `${trackIndex}:${returnIndex}`;
+    const key = keyOf(row);
     let entry = channels.get(key);
     if (!entry) { entry = {last:-Infinity, timer:null, inFlight:false}; channels.set(key, entry); }
-    entry.pending = {trackIndex, returnIndex, rawName:row.dataset.rawName, returnName:row.dataset.returnName, value};
+    entry.pending = {...(row.dataset.effect === 'true' ? {effectIndex:trackIndex} : {trackIndex}), returnIndex, rawName:row.dataset.rawName, returnName:row.dataset.returnName, value};
     entry.final = final;
     const delay = final ? 0 : Math.max(0, 33 - (performance.now() - entry.last));
     if (!entry.inFlight) {
@@ -85,17 +85,18 @@ export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, st
       tab.addEventListener('click', () => onTab(r.name)); tabs.append(tab);
     }
     if (!ret || !mix.strips.length) list.append(el('p','mix-empty',!ret ? 'Waiting for player returns from Live…' : 'Tag tracks with + and a space to add them to the mix.'));
-    for (const strip of ret ? mix.strips : []) {
+    for (const strip of ret ? [...mix.strips,...(mix.effects || [])] : []) {
       const level = strip.levels[ret.returnIndex]; if (!level) continue;
-      const row = el('div','mix-row');
-      row.dataset.trackIndex = strip.trackIndex; row.dataset.returnIndex = ret.returnIndex;
+      const effect = strip.effectIndex !== undefined;
+      const row = el('div','mix-row' + (effect ? ' mix-effect-row' : '')); row.dataset.effect = String(effect);
+      row.dataset.trackIndex = effect ? strip.effectIndex : strip.trackIndex; row.dataset.returnIndex = ret.returnIndex;
       row.dataset.rawName = strip.rawName; row.dataset.returnName = ret.name;
       row.setAttribute('role','slider'); row.setAttribute('aria-label',`${strip.name} to ${ret.name}`);
       row.setAttribute('aria-valuemin','0'); row.setAttribute('aria-valuemax','100');
       row.setAttribute('aria-orientation','horizontal');
       const fill = el('span','mix-fill'); fill.setAttribute('aria-hidden','true');
       fill.style.backgroundColor = '#' + (strip.color >>> 0).toString(16).padStart(6,'0').slice(-6);
-      row.append(fill,el('span','mix-label',strip.name),el('span','mix-value'));
+      row.append(fill,el('span','mix-label',strip.name + (effect ? ' · Effect' : '')),el('span','mix-value'));
       paint(row,level); list.append(row);
     }
     syncAvailability();

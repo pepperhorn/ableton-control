@@ -104,11 +104,29 @@ function flushLevels() {
             if (!entry.api || !entry.api.id) continue;
             var level = readLevel(entry.api);
             if (!level) continue;
-            for (var i = 0; i < snapshot.tracks.length; i++) if (snapshot.tracks[i].index === entry.trackIndex)
-                snapshot.tracks[i].sends[entry.returnIndex] = level;
-            outlet(0, 'level', entry.trackIndex, entry.returnIndex, level.value, level.label);
+            var rows = entry.trackIndex < 0 ? snapshot.effects : snapshot.tracks;
+            for (var i = 0; i < rows.length; i++) if ((entry.trackIndex < 0 ? -rows[i].index-1 : rows[i].index) === entry.trackIndex) rows[i].sends[entry.returnIndex] = level;
+            outlet(0, entry.trackIndex < 0 ? 'effectLevel' : 'level', entry.trackIndex < 0 ? -entry.trackIndex-1 : entry.trackIndex, entry.returnIndex, level.value, level.label);
         } catch (e) { schedule(); }
     }
+}
+// Recognisable target names must agree with the count-derived layout.
+function effectLayout(count, names, returns, own) {
+    var layout = count === returns.length ? 'all' : count === returns.length-1 ? 'skip-own' : 'unknown';
+    if (layout === 'unknown') return layout;
+    for (var slot = 0; slot < names.length; slot++) {
+        var expected = layout === 'all' ? slot : slot >= own ? slot+1 : slot;
+        var name = String(names[slot]).replace(/^\s+|\s+$/g, ''), target = -1, hits = 0;
+        for (var r = 0; r < returns.length; r++) if (name === returns[r].name) { target = r; hits++; }
+        if (hits > 1) return 'contradictory';
+        if (!hits) {
+            var letter = /^Send\s+([A-L])(?:$|[\s:.-])/i.exec(name);
+            if (!letter) letter = /^([A-L])(?:$|[- ])/i.exec(name);
+            if (letter) target = letter[1].toUpperCase().charCodeAt(0)-65;
+        }
+        if (target !== -1 && target !== expected) return 'contradictory';
+    }
+    return layout;
 }
 function rebuild() {
     if (!active || building) return;
@@ -119,7 +137,7 @@ function rebuild() {
         retired = retired.concat(metadataObservers, sendObservers);
     metadataObservers = []; sendObservers = [];
     trackApis = {}; returnApis = {}; sendApis = {};
-    scan = {next:{returns:[], tracks:[]}, index:0, phase:'returns'};
+    scan = {next:{returns:[], tracks:[], effects:[]}, index:0, phase:'returns'};
     try {
         trackIds = String(root.get('tracks')); returnIds = String(root.get('return_tracks'));
         scan.trackCount = root.getcount('tracks'); scan.returnCount = root.getcount('return_tracks');
@@ -172,7 +190,7 @@ function scanTick() {
                     next.tracks.push(item); scan.item = item; scan.sendIndex = 0; scan.phase = 'sends'; break;
                 } else scan.index++;
             }
-        } else {
+        } else if (scan.phase === 'sends') {
             i = scan.index; item = scan.item;
             for (j = scan.sendIndex; j < scan.returnCount && count < MIX_SEND_CHUNK; j++, count++) {
                 if (next.returns[j].routedToMain !== false) continue;
@@ -187,7 +205,42 @@ function scanTick() {
             scan.sendIndex = j;
             if (j === scan.returnCount) { scan.index++; scan.phase = 'tracks'; }
         }
-        if (scan.phase === 'tracks' && scan.index === scan.trackCount) {
+        if (scan.phase === 'tracks' && scan.index === scan.trackCount) { scan.phase = 'effects'; scan.index = 0; }
+        else if (scan.phase === 'effects') {
+            while (scan.index < scan.returnCount && next.returns[scan.index].routedToMain !== true) scan.index++;
+            i = scan.index++;
+            if (i < scan.returnCount && next.returns[i].routedToMain === true) {
+                path = 'live_set return_tracks ' + i + ' mixer_device';
+                api = new LiveAPI(path);
+                try {
+                    var sendCount = api.getcount('sends'), names = [], offset;
+                    for (j = 0; j < sendCount && j < 12; j++) {
+                        param = new LiveAPI(path + ' sends ' + j);
+                        try { names.push(text(param, 'name')); } finally { release(param); }
+                    }
+                    var layout = effectLayout(sendCount,names,next.returns,i);
+                    post('Setlist Touch effect sends: count=' + sendCount + ' names=' + names.join(',') + ' layout=' + layout + '\n');
+                    if (layout !== 'unknown' && layout !== 'contradictory') {
+                        item = {index:i, name:next.returns[i].name, color:next.returns[i].color, sends:[]};
+                        next.effects.push(item);
+                        scan.effectItem = item; scan.effectPath = path; scan.effectOwn = i; scan.effectCount = sendCount; scan.effectSendIndex = 0; scan.phase = 'effectSends';
+                    }
+                } catch (e) { post('Setlist Touch effect sends unavailable: count=' + sendCount + ' names=' + (names || []).join(',') + ' layout=unavailable ' + e + '\n'); }
+                finally { release(api); }
+            }
+        }
+        else if (scan.phase === 'effectSends') {
+            item = scan.effectItem; i = scan.effectOwn;
+            for (j = scan.effectSendIndex; j < scan.returnCount && count < MIX_SEND_CHUNK; j++, count++) if (next.returns[j].routedToMain === false) {
+                var offset = scan.effectCount === scan.returnCount ? j : j > i ? j-1 : j;
+                param = null;
+                try { param = observeSend(scan.effectPath + ' sends ' + offset, -i-1, j); item.sends[j] = readLevel(param); if (item.sends[j]) sendApis[(-i-1) + ':' + j] = param; else release(param); }
+                catch (e) { release(param); }
+            }
+            scan.effectSendIndex = j;
+            if (j === scan.returnCount) scan.phase = 'effects';
+        }
+        if (scan.phase === 'effects' && scan.index >= scan.returnCount) {
             if (published) retired = retired.concat(published.metadataObservers, published.sendObservers);
             snapshot = next; scan = null; dirty = false;
             published = {trackApis:trackApis, returnApis:returnApis, sendApis:sendApis,
@@ -240,4 +293,17 @@ function notifydeleted() {
     published = null;
     trackApis = {}; returnApis = {}; sendApis = {};
     levelsPending = false; root = null; snapshot = {returns:[], tracks:[]}; pendingLevels = {}; scanLevels = {}; trackIds = ''; returnIds = '';
+}
+
+function effectSend(effectIndex, returnIndex, value, expectedEffectName, expectedReturnName) {
+    if (!active || building || !root || !published) return;
+    effectIndex = Number(effectIndex); returnIndex = Number(returnIndex); value = Number(value);
+    if (effectIndex < 0 || returnIndex < 0 || effectIndex !== Math.floor(effectIndex) || returnIndex !== Math.floor(returnIndex) || !isFinite(value) || value < 0 || value > 1) return;
+    var effect = snapshot.returns[effectIndex], player = snapshot.returns[returnIndex];
+    var api = published.returnApis[effectIndex], ret = published.returnApis[returnIndex], param = published.sendApis[(-effectIndex-1) + ':' + returnIndex];
+    if (!effect || !player || !api || !ret || !param || !param.id || effect.name !== expectedEffectName || player.name !== expectedReturnName) return;
+    try {
+        if (String(root.get('return_tracks')) !== published.returnIds || text(api, 'name') !== expectedEffectName || text(ret, 'name') !== expectedReturnName || routedToMain(api) !== true || routedToMain(ret) !== false) { if (!dirty) schedule(); return; }
+        param.set('value', value);
+    } catch (e) { schedule(); }
 }

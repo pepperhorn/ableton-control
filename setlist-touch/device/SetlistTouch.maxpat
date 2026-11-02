@@ -122,6 +122,71 @@
    },
    {
     "box": {
+     "id": "player-route",
+     "maxclass": "newobj",
+     "patching_rect": [
+      1000,
+      300,
+      220,
+      22
+     ],
+     "text": "route players effectSend"
+    }
+   },
+   {
+    "box": {
+     "id": "player-defer",
+     "maxclass": "newobj",
+     "patching_rect": [
+      1000,
+      340,
+      220,
+      22
+     ],
+     "text": "deferlow"
+    }
+   },
+   {
+    "box": {
+     "id": "players",
+     "maxclass": "newobj",
+     "patching_rect": [
+      1000,
+      380,
+      220,
+      22
+     ],
+     "text": "js players.js"
+    }
+   },
+   {
+    "box": {
+     "id": "effect-defer",
+     "maxclass": "newobj",
+     "patching_rect": [
+      700,
+      380,
+      220,
+      22
+     ],
+     "text": "deferlow"
+    }
+   },
+   {
+    "box": {
+     "id": "effect-send",
+     "maxclass": "newobj",
+     "patching_rect": [
+      700,
+      420,
+      220,
+      22
+     ],
+     "text": "prepend effectSend"
+    }
+   },
+   {
+    "box": {
      "id": "transport-route",
      "maxclass": "newobj",
      "patching_rect": [
@@ -826,6 +891,102 @@
      "source": [
       "route",
       6
+     ],
+     "destination": [
+      "player-route",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "player-route",
+      0
+     ],
+     "destination": [
+      "player-defer",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "player-defer",
+      0
+     ],
+     "destination": [
+      "players",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "players",
+      0
+     ],
+     "destination": [
+      "node",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "refresh",
+      0
+     ],
+     "destination": [
+      "players",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "player-route",
+      1
+     ],
+     "destination": [
+      "effect-defer",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "effect-defer",
+      0
+     ],
+     "destination": [
+      "effect-send",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "effect-send",
+      0
+     ],
+     "destination": [
+      "mix",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "player-route",
+      2
      ],
      "destination": [
       "transport-route",

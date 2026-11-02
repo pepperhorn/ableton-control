@@ -86,3 +86,10 @@ test('damaged access fields get backed up and a failed backup never stops config
  a.deepEqual(loaded.configWarning,{backupAvailable:false});a.equal(loaded.password,'keep');a.equal(loaded.accessEnabled,true);a.equal(fs.readFileSync(file,'utf8'),bytes);
  loaded=loadConfig(file);a.equal(loaded.configWarning.backupAvailable,true);a.equal(fs.readFileSync(file+'.damaged','utf8'),bytes);
 });
+
+test('stale damaged backup is not reported as a recovery copy of current damaged config',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'st-stale-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'config.json');
+ fs.writeFileSync(file,'broken current');fs.writeFileSync(file+'.damaged','broken previous');
+ a.equal(loadConfig(file).configWarning.backupAvailable,false);a.equal(fs.readFileSync(file+'.damaged','utf8'),'broken previous');
+ fs.writeFileSync(file+'.damaged','broken current');a.equal(loadConfig(file).configWarning.backupAvailable,true);
+});

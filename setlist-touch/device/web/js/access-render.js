@@ -1,7 +1,9 @@
+import {createPlayerRenderer} from './player-render.js';
 import {showPicker} from './access-view.js';
 const $ = s => document.querySelector(s);
 function el(tag, cls, text) { const node = document.createElement(tag); node.className = cls; if (text !== undefined) node.textContent = text; return node; }
 export function createAccessRenderer({meOf, mixOf, refresh, status}) {
+  const playerUI = createPlayerRenderer({refresh:async () => { loaded = false; await refresh(); }});
   let draft = [], loaded = false;
   async function post(route, body) {
     const res = await fetch(route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -42,7 +44,7 @@ export function createAccessRenderer({meOf, mixOf, refresh, status}) {
     }
   }
   async function admin() {
-    const show = location.hash === '#admin' && meOf().kind === 'admin'; $('.admin-page').hidden = !show;
+    const show = location.hash === '#admin' && meOf().kind === 'admin'; $('.admin-page').hidden = !show; playerUI.render(show);
     $('.admin-login').hidden = location.hash !== '#admin' || show || !meOf().adminAvailable;
     if (!show) { loaded = false; return; }
     if (loaded) return;

@@ -1,7 +1,7 @@
 const {test}=require('node:test');const a=require('node:assert/strict');
 const http=require('http'),path=require('path');const {EventEmitter}=require('events');
 const {createApp}=require('../device/lib/app');const fixture=require('../device/lib/fixture-rise.json');
-async function setup(t,remoteAddress,ready=true,password='pw'){const bridge=new EventEmitter();bridge.fires=[];bridge.fire=(i,name)=>bridge.fires.push([i,name]);const saved=[];const app=createApp({bridge,config:{port:8765,username:'band',password},saveConfig:c=>saved.push(c),webRoot:path.join(__dirname,'../device/web'),remoteAddressOf:remoteAddress?()=>remoteAddress:undefined});const port=await app.listen(0);if(ready)bridge.emit('scenes',fixture);bridge.emit('play',{playing:23,fired:-1});bridge.emit('pos',{scene:23,position:42,loopStart:0,loopEnd:128,beatsPerBar:4});t.after(()=>app.close());return {bridge,app,port,saved};}
+async function setup(t,remoteAddress,ready=true,password='pw'){const bridge=new EventEmitter();bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[]}});bridge.fires=[];bridge.fire=(i,name)=>bridge.fires.push([i,name]);const saved=[];const app=createApp({bridge,config:{port:8765,username:'band',password},saveConfig:c=>saved.push(c),webRoot:path.join(__dirname,'../device/web'),remoteAddressOf:remoteAddress?()=>remoteAddress:undefined});const port=await app.listen(0);if(ready)bridge.emit('scenes',fixture);bridge.emit('play',{playing:23,fired:-1});bridge.emit('pos',{scene:23,position:42,loopStart:0,loopEnd:128,beatsPerBar:4});t.after(()=>app.close());return {bridge,app,port,saved};}
 function req(port,url,body,headers={}){return new Promise((resolve,reject)=>{const r=http.request({hostname:'127.0.0.1',port,path:url,method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...headers}},res=>{let data='';res.on('data',c=>data+=c);res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,data}));});r.on('error',reject);r.end(body===undefined?undefined:JSON.stringify(body));});}
 test('SSE sends full snapshot on every connection',async t=>{const {port}=await setup(t);for(let i=0;i<2;i++)await new Promise((resolve,reject)=>{const r=http.get(`http://127.0.0.1:${port}/api/events`,res=>{let s='';res.on('data',c=>{s+=c;if(s.includes('event: pos')){const events=s.split('\n\n').filter(x=>x.startsWith('event:'));a.match(events[0],/event: set/);a.equal(JSON.parse(events[0].split('data: ')[1]).songs.length,4);a.match(events[1],/event: mix/);a.match(events[2],/event: play/);a.match(events[3],/"bar":11/);r.destroy();resolve();}});});r.on('error',reject);});});
 test('fire validates current row and name',async t=>{const {port,bridge}=await setup(t);a.equal((await req(port,'/api/fire',{sceneIndex:23,name:'[N32] AA'})).status,204);for(const body of [{sceneIndex:23,name:'stale'},{sceneIndex:19,name:'* RISE >>'}])a.equal((await req(port,'/api/fire',body)).status,409);for(const body of [{sceneIndex:'23',name:'x'},null,{}])a.equal((await req(port,'/api/fire',body)).status,400);a.deepEqual(bridge.fires,[[23,'[N32] AA']]);});
@@ -160,7 +160,7 @@ test('slow fake index publishes progress before a single complete scene snapshot
  const intervals=[],cleared=[];
  const source=require('fs').readFileSync(path.join(__dirname,'../device/lib/fake-bridge.js'),'utf8');
  const module={exports:{}};
- require('vm').runInNewContext(source,{module,require,setInterval:fn=>{intervals.push(fn);return intervals.length;},clearInterval:id=>cleared.push(id),setTimeout,clearTimeout});
+ require('vm').runInNewContext(source,{module,require:require('node:module').createRequire(path.join(__dirname,'../device/lib/fake-bridge.js')),setInterval:fn=>{intervals.push(fn);return intervals.length;},clearInterval:id=>cleared.push(id),setTimeout,clearTimeout});
  const bridge=module.exports.createFakeBridge(fixture,undefined,{slowIndex:true}),events=[];
  bridge.on('scenes',rows=>events.push(['scenes',rows.length]));bridge.on('progress',p=>events.push(['progress',p.done,p.total]));
  bridge.snapshot();a.deepEqual(events,[['progress',0,fixture.length]]);
@@ -359,4 +359,102 @@ test('laptop settings report damaged config and a password save retains its reco
  a.equal((await req(port,'/api/config',{port:config.port,username:'band',password:'replacement'})).status,200);
  a.equal(fs.readFileSync(file+'.damaged','utf8'),bytes);a.equal(JSON.parse(fs.readFileSync(file)).accessEnabled,true);
  a.deepEqual(JSON.parse((await req(port,'/api/config')).data).configWarning,{backupAvailable:true});
+});
+
+const playerBody={name:'New',sendName:'New mix',typeId:'ext',channelId:'3/4',explicitOutput:true,confirmPlaying:true};
+test('player routes require admin even with access off and reject foreign Origin',async t=>{
+ const {port,bridge}=await setup(t,'192.168.1.20');let called=0;bridge.addPlayer=()=>called++;bridge.playerOutputs=()=>called++;
+ const headers={Authorization:'Basic '+Buffer.from('band:pw').toString('base64')};
+ a.equal((await req(port,'/api/players',playerBody,headers)).status,403);a.equal((await req(port,'/api/player-outputs',undefined,headers)).status,403);a.equal(called,0);
+ const local=await setup(t);a.equal((await req(local.port,'/api/players',playerBody,{Origin:'http://evil'})).status,403);
+});
+test('player add saves readback mix only on success, updates case-insensitive member and enables access once',async t=>{
+ const {port,bridge,saved}=await setup(t);bridge.addPlayer=async()=>({ok:false,message:'Routing failed. Return remains'});
+ a.equal((await req(port,'/api/players',playerBody)).status,409);a.equal(saved.length,0);
+ bridge.addPlayer=async()=>({ok:true,returnName:'D-New mix'});
+ a.equal((await req(port,'/api/players',playerBody)).status,200);a.equal(saved[0].accessEnabled,true);a.deepEqual(saved[0].members[0].mixes,['D-New mix']);
+ a.equal((await req(port,'/api/players',{...playerBody,name:'new'})).status,200);a.equal(saved[1].members.length,1);
+});
+test('player add serializes pending work and confirms current playing state on server',async t=>{
+ const {port,bridge,saved}=await setup(t);bridge.emit('transport',{is_playing:1,record_mode:0,tempo:100,current_song_time:0,signature_numerator:4,signature_denominator:4});
+ let resolve;bridge.addPlayer=()=>new Promise(r=>resolve=r);
+ a.equal((await req(port,'/api/players',{...playerBody,confirmPlaying:false})).status,409);
+ const pending=req(port,'/api/players',{...playerBody,confirmPlaying:true});
+ while(!resolve)await new Promise(r=>setImmediate(r));
+ a.equal((await req(port,'/api/players',{...playerBody,confirmPlaying:true})).status,409);a.equal(saved.length,0);
+ resolve({ok:true,returnName:'New mix'});a.equal((await pending).status,200);
+});
+test('effect permission resolves actual current return and stale names fail closed',async t=>{
+ const {port,bridge}=await setup(t);const raw=JSON.parse(JSON.stringify(require('../device/lib/fixture-mix.json')));
+ raw.effects=[{index:0,name:raw.returns[0].name,color:0,sends:{2:{value:0,label:'-inf dB'}}}];bridge.emit('mix',raw);
+ const writes=[];bridge.setEffectSend=(...v)=>writes.push(v);
+ const command={effectIndex:0,returnIndex:2,rawName:raw.returns[0].name,returnName:raw.returns[2].name,value:0.5};
+ a.equal((await req(port,'/api/effect-send',command)).status,204);
+ a.equal((await req(port,'/api/effect-send',{...command,returnName:'wrong'})).status,409);
+ a.equal((await req(port,'/api/effect-send',{...command,returnIndex:0})).status,403);a.equal(writes.length,1);
+});
+
+test('removed device releases pending player lock without saving or accepting late reply',async t=>{
+ const {port,bridge,saved}=await setup(t);let resolve;bridge.addPlayer=()=>new Promise(r=>resolve=r);
+ const pending=req(port,'/api/players',playerBody);while(!resolve)await new Promise(r=>setImmediate(r));bridge.emit('playerRemoved');
+ const result=await pending;a.equal(result.status,409);a.match(result.data,/Device removed/);resolve({ok:true,returnName:'late'});await new Promise(r=>setImmediate(r));a.equal(saved.length,0);
+ bridge.addPlayer=async()=>({ok:true,returnName:'new'});a.equal((await req(port,'/api/players',playerBody)).status,200);
+});
+test('player timeout releases lock and ignores late Live success',async t=>{
+ const {port,bridge,saved}=await setup(t);let resolve;bridge.addPlayer=()=>new Promise(r=>resolve=r);
+ const pending=req(port,'/api/players',playerBody);const result=await pending;a.equal(result.status,409);a.match(result.data,/did not reply/);a.equal(saved.length,0);
+ resolve({ok:true,returnName:'late'});bridge.addPlayer=async()=>({ok:false,message:'retry reached Live'});a.match((await req(port,'/api/players',playerBody)).data,/retry reached Live/);
+});
+
+test('member cannot forge an effect send to another player by naming their permitted mix',async t=>{
+ const {sign}=require('../device/lib/access');const secret='a'.repeat(64);const bridge=new EventEmitter();const app=createApp({bridge,remoteAddressOf:()=> '192.168.1.2',config:{port:8765,username:'band',password:'pw',accessEnabled:true,members:[{id:'one',name:'Shaun',pages:['monitor'],mixes:['Shaun']}],secret}});
+ const port=await app.listen(0);t.after(()=>app.close());const raw=JSON.parse(JSON.stringify(require('../device/lib/fixture-mix.json')));raw.effects=[{index:0,name:raw.returns[0].name,color:0,sends:{2:{value:0,label:''},3:{value:0,label:''}}}];bridge.emit('mix',raw);
+ const writes=[];bridge.setEffectSend=(...v)=>writes.push(v);const headers={Authorization:'Basic '+Buffer.from('band:pw').toString('base64'),Cookie:'st_id='+sign({kind:'member',memberId:'one'},secret)};
+ const command={effectIndex:0,returnIndex:3,returnName:'Shaun',rawName:raw.returns[0].name,value:0.3};a.equal((await req(port,'/api/effect-send',command,headers)).status,403);a.equal(writes.length,0);
+ a.equal((await req(port,'/api/effect-send',{...command,returnIndex:2},headers)).status,204);a.equal(writes.length,1);
+});
+
+test('unknown transport requires confirmation before discovery or set changes',async t=>{
+ const {port,bridge}=await setup(t);let reads=0;bridge.playerOutputs=()=>reads++;
+ const result=await req(port,'/api/players',{...playerBody,confirmPlaying:false});a.equal(result.status,409);a.equal(reads,0);
+});
+test('new return requires explicit nonempty output and names are trimmed before bridge or member save',async t=>{
+ const {port,bridge,saved}=await setup(t);let calls=0;bridge.addPlayer=async value=>{calls++;a.equal(value.name,'New');a.equal(value.sendName,'New mix');return {ok:true,returnName:'D-New mix'};};
+ for(const change of [{explicitOutput:false},{channelId:''}])a.equal((await req(port,'/api/players',{...playerBody,...change})).status,400);
+ a.equal(calls,0);a.equal((await req(port,'/api/players',{...playerBody,name:' New ',sendName:' New mix '})).status,200);a.equal(saved[0].members[0].name,'New');
+});
+test('stale reroute refused at server; unchanged routing forwarded only with explicit intent',async t=>{
+ const {port,bridge}=await setup(t);const ret={index:2,name:'C-New mix',type:{identifier:'ext',display_name:'Ext. Out'},channel:{identifier:'5/6',display_name:'5/6'}};
+ bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[ret]}});let calls=0;bridge.addPlayer=async value=>{calls++;return {ok:true,returnName:ret.name};};
+ const expectedRouting={index:2,name:ret.name,typeId:'ext',channelId:'3/4'};
+ a.equal((await req(port,'/api/players',{...playerBody,reroute:true,expectedRouting})).status,409);a.equal(calls,0);
+ expectedRouting.channelId='5/6';a.equal((await req(port,'/api/players',{...playerBody,reroute:true,expectedRouting})).status,200);a.equal(calls,1);
+ a.equal((await req(port,'/api/players',{...playerBody,explicitOutput:false,typeId:'',channelId:''})).status,200);a.equal(calls,2);
+});
+
+test('server A Gtr does not alias E Gtr, and ambiguous lookup is its own punctuated 409 before add',async t=>{
+ const {port,bridge,saved}=await setup(t);let calls=0;
+ bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[{index:1,name:'E Gtr'}]}});
+ bridge.addPlayer=async value=>{calls++;a.equal(value.sendName,'A Gtr');return {ok:true,returnName:'D-A Gtr'};};
+ a.equal((await req(port,'/api/players',{...playerBody,name:'A Gtr',sendName:'A Gtr'})).status,200);a.deepEqual(saved[0].members[0].mixes,['D-A Gtr']);a.equal(calls,1);
+ bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[{name:'A-Gtr'},{name:'B-Gtr'}]}});
+ const result=await req(port,'/api/players',{...playerBody,sendName:'Gtr'});a.equal(result.status,409);a.equal(result.data,'More than one return has that name.');a.equal(calls,1);
+});
+test('authoritative Live result reports a late link whose explicitly requested output was kept',async t=>{
+ const {port,bridge}=await setup(t);bridge.addPlayer=async()=>({ok:true,returnName:'C-New mix',routeKept:true});
+ const result=await req(port,'/api/players',playerBody);a.equal(result.status,200);a.equal(JSON.parse(result.data).routeKept,true);
+ // A preflight match may disappear before Max; do not infer the actual result from preflight.
+ bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[{name:'C-New mix'}]}});bridge.addPlayer=async()=>({ok:true,returnName:'D-New mix',routeKept:false});
+ a.equal(JSON.parse((await req(port,'/api/players',playerBody)).data).routeKept,false);
+});
+for(const key of ['index','name','typeId','channelId'])test('server reroute regression refuses stale '+key+' before Live add',async t=>{
+ const {port,bridge}=await setup(t);const ret={index:1,name:'D-New mix',type:{identifier:'ext'},channel:{identifier:'3/4'}};
+ bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[ret]}});let calls=0;bridge.addPlayer=async()=>{calls++;return {ok:true,returnName:ret.name};};
+ const expectedRouting={index:1,name:ret.name,typeId:'ext',channelId:'3/4'};expectedRouting[key]=key==='index'?9:'stale';
+ a.equal((await req(port,'/api/players',{...playerBody,reroute:true,expectedRouting})).status,409);a.equal(calls,0);
+});
+test('server refuses A Gtr reroute even with a genuine observed E Gtr route',async t=>{
+ const {port,bridge}=await setup(t);const ret={index:1,name:'E Gtr',type:{identifier:'ext'},channel:{identifier:'3/4'}};bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[ret]}});let calls=0;bridge.addPlayer=()=>calls++;
+ const expectedRouting={index:1,name:ret.name,typeId:'ext',channelId:'3/4'};
+ a.equal((await req(port,'/api/players',{...playerBody,sendName:'A Gtr',reroute:true,expectedRouting})).status,409);a.equal(calls,0);
 });

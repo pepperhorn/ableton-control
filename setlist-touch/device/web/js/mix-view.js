@@ -5,7 +5,7 @@ export function reduceMix(state, action, mix) {
   switch (action.type) {
     case 'page': return {...state, page:action.page === 'mix' ? 'mix' : 'scenes'};
     case 'tab': return mix.returns.some(r => r.name === action.name) ? {...state, tab:action.name} : state;
-    case 'mix': return {...state, tab:mix.returns.some(r => r.name === state.tab) ? state.tab : (mix.returns[0] || {}).name || null};
+    case 'mix': if (!mix.returns.length) return state; return {...state, tab:mix.returns.some(r => r.name === state.tab) ? state.tab : (mix.returns[0] || {}).name || null};
     default: return state;
   }
 }
