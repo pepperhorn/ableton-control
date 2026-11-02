@@ -1,7 +1,7 @@
 const {test}=require('node:test');const a=require('node:assert/strict');
 const http=require('http'),path=require('path');const {EventEmitter}=require('events');
 const {createApp}=require('../device/lib/app');const fixture=require('../device/lib/fixture-rise.json');
-async function setup(t,remoteAddress,ready=true,password='pw'){const bridge=new EventEmitter();bridge.fires=[];bridge.fire=(i,name)=>bridge.fires.push([i,name]);const saved=[];const app=createApp({bridge,config:{port:8765,username:'band',password},saveConfig:c=>saved.push(c),webRoot:path.join(__dirname,'../device/web'),remoteAddressOf:remoteAddress?()=>remoteAddress:undefined});const port=await app.listen(0);if(ready)bridge.emit('scenes',fixture);bridge.emit('play',{playing:23,fired:-1});bridge.emit('pos',{scene:23,position:42,loopStart:0,loopEnd:128,beatsPerBar:4});t.after(()=>app.close());return {bridge,app,port,saved};}
+async function setup(t,remoteAddress,ready=true,password='pw'){const bridge=new EventEmitter();bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[]}});bridge.fires=[];bridge.fire=(i,name)=>bridge.fires.push([i,name]);const saved=[];const app=createApp({bridge,config:{port:8765,username:'band',password},saveConfig:c=>saved.push(c),webRoot:path.join(__dirname,'../device/web'),remoteAddressOf:remoteAddress?()=>remoteAddress:undefined});const port=await app.listen(0);if(ready)bridge.emit('scenes',fixture);bridge.emit('play',{playing:23,fired:-1});bridge.emit('pos',{scene:23,position:42,loopStart:0,loopEnd:128,beatsPerBar:4});t.after(()=>app.close());return {bridge,app,port,saved};}
 function req(port,url,body,headers={}){return new Promise((resolve,reject)=>{const r=http.request({hostname:'127.0.0.1',port,path:url,method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...headers}},res=>{let data='';res.on('data',c=>data+=c);res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,data}));});r.on('error',reject);r.end(body===undefined?undefined:JSON.stringify(body));});}
 test('SSE sends full snapshot on every connection',async t=>{const {port}=await setup(t);for(let i=0;i<2;i++)await new Promise((resolve,reject)=>{const r=http.get(`http://127.0.0.1:${port}/api/events`,res=>{let s='';res.on('data',c=>{s+=c;if(s.includes('event: pos')){const events=s.split('\n\n').filter(x=>x.startsWith('event:'));a.match(events[0],/event: set/);a.equal(JSON.parse(events[0].split('data: ')[1]).songs.length,4);a.match(events[1],/event: mix/);a.match(events[2],/event: play/);a.match(events[3],/"bar":11/);r.destroy();resolve();}});});r.on('error',reject);});});
 test('fire validates current row and name',async t=>{const {port,bridge}=await setup(t);a.equal((await req(port,'/api/fire',{sceneIndex:23,name:'[N32] AA'})).status,204);for(const body of [{sceneIndex:23,name:'stale'},{sceneIndex:19,name:'* RISE >>'}])a.equal((await req(port,'/api/fire',body)).status,409);for(const body of [{sceneIndex:'23',name:'x'},null,{}])a.equal((await req(port,'/api/fire',body)).status,400);a.deepEqual(bridge.fires,[[23,'[N32] AA']]);});
@@ -160,7 +160,7 @@ test('slow fake index publishes progress before a single complete scene snapshot
  const intervals=[],cleared=[];
  const source=require('fs').readFileSync(path.join(__dirname,'../device/lib/fake-bridge.js'),'utf8');
  const module={exports:{}};
- require('vm').runInNewContext(source,{module,require,setInterval:fn=>{intervals.push(fn);return intervals.length;},clearInterval:id=>cleared.push(id),setTimeout,clearTimeout});
+ require('vm').runInNewContext(source,{module,require:require('node:module').createRequire(path.join(__dirname,'../device/lib/fake-bridge.js')),setInterval:fn=>{intervals.push(fn);return intervals.length;},clearInterval:id=>cleared.push(id),setTimeout,clearTimeout});
  const bridge=module.exports.createFakeBridge(fixture,undefined,{slowIndex:true}),events=[];
  bridge.on('scenes',rows=>events.push(['scenes',rows.length]));bridge.on('progress',p=>events.push(['progress',p.done,p.total]));
  bridge.snapshot();a.deepEqual(events,[['progress',0,fixture.length]]);
@@ -361,7 +361,7 @@ test('laptop settings report damaged config and a password save retains its reco
  a.deepEqual(JSON.parse((await req(port,'/api/config')).data).configWarning,{backupAvailable:true});
 });
 
-const playerBody={name:'New',sendName:'New mix',typeId:'ext',channelId:'3/4'};
+const playerBody={name:'New',sendName:'New mix',typeId:'ext',channelId:'3/4',explicitOutput:true,confirmPlaying:true};
 test('player routes require admin even with access off and reject foreign Origin',async t=>{
  const {port,bridge}=await setup(t,'192.168.1.20');let called=0;bridge.addPlayer=()=>called++;bridge.playerOutputs=()=>called++;
  const headers={Authorization:'Basic '+Buffer.from('band:pw').toString('base64')};
@@ -378,7 +378,7 @@ test('player add saves readback mix only on success, updates case-insensitive me
 test('player add serializes pending work and confirms current playing state on server',async t=>{
  const {port,bridge,saved}=await setup(t);bridge.emit('transport',{is_playing:1,record_mode:0,tempo:100,current_song_time:0,signature_numerator:4,signature_denominator:4});
  let resolve;bridge.addPlayer=()=>new Promise(r=>resolve=r);
- a.equal((await req(port,'/api/players',playerBody)).status,409);
+ a.equal((await req(port,'/api/players',{...playerBody,confirmPlaying:false})).status,409);
  const pending=req(port,'/api/players',{...playerBody,confirmPlaying:true});
  while(!resolve)await new Promise(r=>setImmediate(r));
  a.equal((await req(port,'/api/players',{...playerBody,confirmPlaying:true})).status,409);a.equal(saved.length,0);
@@ -412,4 +412,22 @@ test('member cannot forge an effect send to another player by naming their permi
  const writes=[];bridge.setEffectSend=(...v)=>writes.push(v);const headers={Authorization:'Basic '+Buffer.from('band:pw').toString('base64'),Cookie:'st_id='+sign({kind:'member',memberId:'one'},secret)};
  const command={effectIndex:0,returnIndex:3,returnName:'Shaun',rawName:raw.returns[0].name,value:0.3};a.equal((await req(port,'/api/effect-send',command,headers)).status,403);a.equal(writes.length,0);
  a.equal((await req(port,'/api/effect-send',{...command,returnIndex:2},headers)).status,204);a.equal(writes.length,1);
+});
+
+test('unknown transport requires confirmation before discovery or set changes',async t=>{
+ const {port,bridge}=await setup(t);let reads=0;bridge.playerOutputs=()=>reads++;
+ const result=await req(port,'/api/players',{...playerBody,confirmPlaying:false});a.equal(result.status,409);a.equal(reads,0);
+});
+test('new return requires explicit nonempty output and names are trimmed before bridge or member save',async t=>{
+ const {port,bridge,saved}=await setup(t);let calls=0;bridge.addPlayer=async value=>{calls++;a.equal(value.name,'New');a.equal(value.sendName,'New mix');return {ok:true,returnName:'D-New mix'};};
+ for(const change of [{explicitOutput:false},{channelId:''}])a.equal((await req(port,'/api/players',{...playerBody,...change})).status,400);
+ a.equal(calls,0);a.equal((await req(port,'/api/players',{...playerBody,name:' New ',sendName:' New mix '})).status,200);a.equal(saved[0].members[0].name,'New');
+});
+test('stale reroute refused at server; unchanged routing forwarded only with explicit intent',async t=>{
+ const {port,bridge}=await setup(t);const ret={index:2,name:'C-New mix',type:{identifier:'ext',display_name:'Ext. Out'},channel:{identifier:'5/6',display_name:'5/6'}};
+ bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[ret]}});let calls=0;bridge.addPlayer=async value=>{calls++;return {ok:true,returnName:ret.name};};
+ const expectedRouting={index:2,name:ret.name,typeId:'ext',channelId:'3/4'};
+ a.equal((await req(port,'/api/players',{...playerBody,reroute:true,expectedRouting})).status,409);a.equal(calls,0);
+ expectedRouting.channelId='5/6';a.equal((await req(port,'/api/players',{...playerBody,reroute:true,expectedRouting})).status,200);a.equal(calls,1);
+ a.equal((await req(port,'/api/players',{...playerBody,explicitOutput:false,typeId:'',channelId:''})).status,200);a.equal(calls,2);
 });

@@ -57,3 +57,13 @@ function newMember(name, returnNames) {
 }
 function checkAdminPassword(given, cfg) { return !!cfg.adminPassword && typeof given === 'string' && equal(given,cfg.adminPassword); }
 module.exports = {adminToken,validMembers,normalizeAccess,sign,verify,identify,can,meFor,newMember,checkAdminPassword};
+
+// Return lookup only; stored permission names remain the exact Live readback.
+function matchReturn(returns, name) {
+  const trim = value => value.trim(), normalized = value => trim(value).replace(/^[A-L][- ]/, '');
+  const exact = returns.filter(r => trim(r.name) === trim(name));
+  const matches = exact.length ? exact : returns.filter(r => normalized(r.name) === normalized(name));
+  if (matches.length > 1) throw Error('More than one return has that name');
+  return matches[0] || null;
+}
+module.exports.matchReturn = matchReturn;

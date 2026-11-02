@@ -110,6 +110,24 @@ function flushLevels() {
         } catch (e) { schedule(); }
     }
 }
+// Recognisable target names must agree with the count-derived layout.
+function effectLayout(count, names, returns, own) {
+    var layout = count === returns.length ? 'all' : count === returns.length-1 ? 'skip-own' : 'unknown';
+    if (layout === 'unknown') return layout;
+    for (var slot = 0; slot < names.length; slot++) {
+        var expected = layout === 'all' ? slot : slot >= own ? slot+1 : slot;
+        var name = String(names[slot]).replace(/^\s+|\s+$/g, ''), target = -1, hits = 0;
+        for (var r = 0; r < returns.length; r++) if (name === returns[r].name) { target = r; hits++; }
+        if (hits > 1) return 'contradictory';
+        if (!hits) {
+            var letter = /^Send\s+([A-L])(?:$|[\s:.-])/i.exec(name);
+            if (!letter) letter = /^([A-L])(?:$|[- ])/i.exec(name);
+            if (letter) target = letter[1].toUpperCase().charCodeAt(0)-65;
+        }
+        if (target !== -1 && target !== expected) return 'contradictory';
+    }
+    return layout;
+}
 function rebuild() {
     if (!active || building) return;
     dirty = true; generation++; debounce.cancel(); scanTask.cancel();
@@ -200,14 +218,14 @@ function scanTick() {
                         param = new LiveAPI(path + ' sends ' + j);
                         try { names.push(text(param, 'name')); } finally { release(param); }
                     }
-                    if (sendCount !== scan.returnCount && sendCount !== scan.returnCount - 1) {
-                        post('Setlist Touch effect sends: count=' + sendCount + ' names=' + names.join(',') + '\n');
-                    } else {
+                    var layout = effectLayout(sendCount,names,next.returns,i);
+                    post('Setlist Touch effect sends: count=' + sendCount + ' names=' + names.join(',') + ' layout=' + layout + '\n');
+                    if (layout !== 'unknown' && layout !== 'contradictory') {
                         item = {index:i, name:next.returns[i].name, color:next.returns[i].color, sends:[]};
                         next.effects.push(item);
                         scan.effectItem = item; scan.effectPath = path; scan.effectOwn = i; scan.effectCount = sendCount; scan.effectSendIndex = 0; scan.phase = 'effectSends';
                     }
-                } catch (e) { post('Setlist Touch effect sends unavailable: ' + e + '\n'); }
+                } catch (e) { post('Setlist Touch effect sends unavailable: count=' + sendCount + ' names=' + (names || []).join(',') + ' layout=unavailable ' + e + '\n'); }
                 finally { release(api); }
             }
         }

@@ -1,4 +1,5 @@
 'use strict';
+const {matchReturn}=require('./access');
 const {EventEmitter} = require('events');
 function createFakeBridge(rawScenes, rawMix = {returns:[], tracks:[]}, {slowIndex = false} = {}) {
   rawMix = JSON.parse(JSON.stringify(rawMix));
@@ -32,18 +33,20 @@ function createFakeBridge(rawScenes, rawMix = {returns:[], tracks:[]}, {slowInde
   rawMix.effects = rawMix.effects || rawMix.returns.filter(r => r.routedToMain === true).map(r => ({index:r.index,name:r.name,color:r.color,sends:Object.fromEntries(rawMix.returns.filter(p => p.routedToMain === false).map(p => [p.index,{value:0,label:'-inf dB'}]))}));
   const type = {identifier:'external',display_name:'Ext. Out'};
   const channels = ['1/2','3/4','5/6'].map(identifier => ({identifier,display_name:identifier}));
-  bridge.playerOutputs = async () => ({ok:true,outputs:{types:[type],channels,returns:rawMix.returns.map(r => ({index:r.index,name:r.name,type:r.routedToMain ? {display_name:'Main'} : type,channel:r.routedToMain ? null : r.channel || channels[0]}))}});
+  bridge.playerOutputs = async () => ({ok:true,outputs:{types:[type],channels,main:{name:'Main',type,channel:channels[0]},returns:rawMix.returns.map(r => ({index:r.index,name:r.name,type:r.routedToMain ? {display_name:'Main'} : type,channel:r.routedToMain ? null : r.channel || channels[0]}))}});
   bridge.addPlayer = async value => {
-    let ret = rawMix.returns.find(r => r.name === value.sendName);
+    let ret = matchReturn(rawMix.returns,value.sendName.trim());
+    const existed = !!ret;
     if (ret && ret.routedToMain !== false) return {ok:false,message:'This return is routed to Main and cannot be linked as a player.'};
     if (value.sendName === 'Fail') return {ok:false,message:'Simulated routing failure. Return remains in Live; no member added.'};
+    if (!ret && (!value.explicitOutput || !value.channelId)) return {ok:false,message:'Choose an explicit output'};
     if (!ret) {
       if (rawMix.returns.length >= 12) return {ok:false,message:'Live allows 12 returns.'};
       ret = {index:rawMix.returns.length,name:value.sendName,color:7833753,routedToMain:false}; rawMix.returns.push(ret);
       for (const track of rawMix.tracks) track.sends[ret.index] = {value:0,label:'-inf dB'};
       for (const effect of rawMix.effects) effect.sends[ret.index] = {value:0,label:'-inf dB'};
     }
-    ret.channel = channels.find(c => c.identifier === value.channelId); bridge.emit('mix',rawMix);
+    if (!existed || value.reroute === true) ret.channel = channels.find(c => c.identifier === value.channelId); bridge.emit('mix',rawMix);
     return {ok:true,returnName:ret.name};
   };
   bridge.setEffectSend = (effectIndex,returnIndex,value) => {

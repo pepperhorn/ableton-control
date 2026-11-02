@@ -284,11 +284,13 @@ for (const shape of ['all','skip','unknown']) test('effect sends map '+shape+' s
  h.ctx.effectSend(0,2,0.6,raw.returns[0].name,'Shaun');
  a.equal(h.writes.length,1);a.equal(h.writes[0][0],`live_set return_tracks 0 mixer_device sends ${shape==='all'?2:1}`);
  h.flush();a.ok(h.out.some(o=>o[1]==='effectLevel'&&o[2]===0&&o[3]===2));
- for(const change of ['name','route','ids']) {
+ for(const change of ['name','route','ids','playerMain']) {
    const effect=h.data['live_set return_tracks 0'];const saved={...effect};const ids=[...h.data.live_set.return_tracks];
+   const player=h.data['live_set return_tracks 2'],playerRoute=player.output_routing_type;
+   if(change==='playerMain')player.output_routing_type=JSON.stringify({display_name:'Main'});
    if(change==='name')effect.name='Changed';if(change==='route')effect.output_routing_type=JSON.stringify({display_name:'Ext. Out'});if(change==='ids')h.data.live_set.return_tracks[1]=999;
    h.ctx.effectSend(0,2,0.8,raw.returns[0].name,'Shaun');a.equal(h.writes.length,1);
-   Object.assign(effect,saved);h.data.live_set.return_tracks=ids;
+   Object.assign(effect,saved);player.output_routing_type=playerRoute;h.data.live_set.return_tracks=ids;
  }
  h.ctx.effectSend(0,1,0.8,raw.returns[0].name,raw.returns[1].name);a.equal(h.writes.length,1);
  const old=h.observers.filter(o=>o.path.includes('return_tracks')&&o.property==='value');h.ctx.rebuild();h.flush();a.ok(old.every(o=>!o.id));a.ok(h.ticks.every(n=>n<=150));h.destroy();
@@ -300,4 +302,19 @@ test('12 returns with effect and eleven players stay within 150 operations per s
  h.data['live_set return_tracks 0 mixer_device']={sends:Array.from({length:12},(_,i)=>['id',500+i]).flat()};
  for(let i=0;i<12;i++)h.data['live_set return_tracks 0 mixer_device sends '+i]={name:'Send '+i,value:0,label:'-inf dB'};
  h.ctx.refresh();h.flush();a.equal(h.ctx.snapshot.effects.length,1);a.equal(Object.keys(h.ctx.snapshot.effects[0].sends).filter(k=>h.ctx.snapshot.effects[0].sends[k]).length,11);a.ok(h.ticks.every(n=>n<=150),Math.max(...h.ticks));h.destroy();
+});
+
+for(const shape of ['all','skip']) test('count-valid '+shape+' layout rejects contradictory send-letter or full-name targets',()=>{
+ const h=harness();const returns=Array.from({length:5},(_,i)=>({name:'Player '+i}));
+ for(const own of [0,1]) {
+   const indices=shape==='all'?[0,1,2,3,4]:[0,1,2,3,4].filter(i=>i!==own);
+   const names=indices.map(i=>'Send '+String.fromCharCode(65+i));
+   a.equal(h.ctx.effectLayout(names.length,names,returns,own),shape==='all'?'all':'skip-own');
+   names[0]='E';a.equal(h.ctx.effectLayout(names.length,names,returns,own),'contradictory');
+   names[0]='Send E';a.equal(h.ctx.effectLayout(names.length,names,returns,own),'contradictory');
+   names[0]='Player 4';a.equal(h.ctx.effectLayout(names.length,names,returns,own),'contradictory');
+ }
+ h.data['live_set return_tracks 0 mixer_device']={sends:Array.from({length:5},(_,i)=>['id',500+i]).flat()};
+ for(let i=0;i<5;i++)h.data['live_set return_tracks 0 mixer_device sends '+i]={name:'Send '+String.fromCharCode(65+(i===2?4:i)),value:0,label:'-inf dB'};
+ h.ctx.refresh();h.flush();a.equal(h.ctx.snapshot.effects.length,0);a.ok(h.logs.some(l=>/count=5.*layout=contradictory/.test(l)));h.ctx.effectSend(0,2,0.8,h.ctx.snapshot.returns[0].name,'Shaun');a.equal(h.writes.length,0);
 });

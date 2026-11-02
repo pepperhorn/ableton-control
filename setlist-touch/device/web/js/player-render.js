@@ -1,25 +1,29 @@
-import {sendNameFor, outputLabel, playerWarning} from './player-view.js';
+import {matchReturn, routingSeen, sendNameFor, outputChannels, playerWarning} from './player-view.js';
 export function createPlayerRenderer({refresh}) {
   const form = document.querySelector('.add-player'), message = form.querySelector('.add-player-status');
   const fields = form.elements;
-  let edited = false, loaded = false, confirmed = false, known = null;
+  let edited = false, loaded = false, confirmed = false, known = null, matched = null, chosen = false;
   const existing = document.createElement('p'); existing.className = 'add-player-existing'; form.querySelector('.add-player-warning').before(existing);
   function matchExisting() {
-    const ret = known && known.returns.find(r => r.name === fields.sendName.value);
-    existing.textContent = ret ? 'Existing return: ' + (ret.type && ret.type.display_name || 'Unknown routing') + (ret.channel ? ' · ' + ret.channel.display_name : '') : '';
-    if (ret) for (const [key,value] of [['typeId',ret.type],['channelId',ret.channel]]) if (value && [...fields[key].options].some(o => o.value === String(value.identifier))) fields[key].value = String(value.identifier);
+    chosen = false; fields.channelId.value = '';
+    try { matched = known ? matchReturn(known.returns,fields.sendName.value.trim()) : null; }
+    catch (e) { matched = null; existing.textContent = e.message; return; }
+    const ret = matched;
+    existing.textContent = ret ? 'Existing return: ' + (ret.type && ret.type.display_name || 'Unknown routing') + (ret.channel ? ' · ' + ret.channel.display_name : '') + '. Keep current output unless you choose another.' : '';
+
   }
   fields.name.oninput = () => { fields.sendName.value = sendNameFor(fields.name.value,fields.sendName.value,edited); confirmed = false; matchExisting(); };
   fields.sendName.oninput = () => { edited = true; confirmed = false; matchExisting(); };
-  form.onchange = () => { confirmed = false; };
+  form.onchange = e => { confirmed = false; if (e.target === fields.channelId || e.target === fields.typeId) chosen = !!fields.channelId.value; };
   async function outputs() {
     try {
       const res = await fetch('/api/player-outputs'); if (!res.ok) throw Error(await res.text());
       const data = await res.json(); known = data;
-      for (const [key, choices] of [['typeId',data.types],['channelId',data.channels]]) {
-        const previous = fields[key].value; fields[key].replaceChildren();
-        for (const choice of choices) { const option = document.createElement('option'); option.value = choice.identifier; option.textContent = key === 'channelId' ? outputLabel(choice,data.returns) : choice.display_name; fields[key].append(option); }
-        if (choices.some(c => String(c.identifier) === previous)) fields[key].value = previous;
+      for (const [key, choices] of [['typeId',data.types],['channelId',outputChannels(data)]]) {
+        fields[key].replaceChildren();
+        const blank = document.createElement('option'); blank.value = ''; blank.textContent = key === 'channelId' ? 'Choose output' : 'Choose output type'; fields[key].append(blank);
+        for (const choice of choices) { const option = document.createElement('option'); option.value = choice.identifier; option.textContent = key === 'channelId' ? choice.label : choice.display_name; option.disabled = !!choice.disabled; fields[key].append(option); }
+        if (key === 'typeId' && choices.length === 1) fields[key].value = String(choices[0].identifier);
       }
       form.querySelector('.add-player-warning').textContent = playerWarning(data);
       fields.add.disabled = !data.types.length;
@@ -30,10 +34,11 @@ export function createPlayerRenderer({refresh}) {
   form.onsubmit = async event => {
     event.preventDefault(); fields.add.disabled = true;
     try {
-      const res = await fetch('/api/players',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:fields.name.value.trim(),sendName:fields.sendName.value.trim(),typeId:fields.typeId.value,channelId:fields.channelId.value,confirmPlaying:confirmed})});
+      if (!matched && (!chosen || !fields.channelId.value)) throw Error('Choose an explicit output before adding a new return');
+      const res = await fetch('/api/players',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:fields.name.value.trim(),sendName:fields.sendName.value.trim(),typeId:fields.typeId.value,channelId:fields.channelId.value,confirmPlaying:confirmed,explicitOutput:chosen,reroute:!!matched && chosen,expectedRouting:routingSeen(matched)})});
       if (!res.ok) {
         const error = await res.text();
-        if (res.status === 409 && error.startsWith('Live is playing.')) { confirmed = true; fields.add.textContent = 'Confirm Add while playing'; }
+        if (res.status === 409 && (error.startsWith('Live is playing.') || error.startsWith('Live transport is unknown.'))) { confirmed = true; fields.add.textContent = 'Confirm Add while playing'; }
         else { confirmed = false; fields.add.textContent = 'Add player'; }
         throw Error(error);
       }

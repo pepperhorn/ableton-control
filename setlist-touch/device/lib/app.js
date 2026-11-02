@@ -1,6 +1,6 @@
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path');
-const {adminToken, normalizeAccess, validMembers, sign, identify, can, meFor, newMember, checkAdminPassword} = require('./access');
+const {matchReturn,adminToken, normalizeAccess, validMembers, sign, identify, can, meFor, newMember, checkAdminPassword} = require('./access');
 const {parseSet} = require('./parse-set');
 const {progress} = require('./progress');
 const {parseMix} = require('./parse-mix');
@@ -185,18 +185,31 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         }
         if (route === '/api/players' && req.method === 'POST') {
           let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+          if (value && typeof value.name === 'string' && typeof value.sendName === 'string') value = {...value,name:value.name.trim(),sendName:value.sendName.trim()};
           if (!value || !['name','sendName'].every(k => typeof value[k] === 'string' && value[k].trim() && value[k].length <= 200) || !['typeId','channelId'].every(k => typeof value[k] === 'string' && value[k].length <= 200)) return reply(res,400,'Invalid player');
-          if (transport && transport.is_playing && value.confirmPlaying !== true) return reply(res,409,'Live is playing. Confirm adding the player while playing.');
+          if ((!transport || transport.is_playing) && value.confirmPlaying !== true) return reply(res,409,'Live is playing. Confirm adding the player while playing.');
           if (adding || changing) return reply(res,409,'A player or settings change is already in progress');
           adding = true; changing = true;
           let timer;
           try {
-            const result = await Promise.race([bridge.addPlayer(value),new Promise((_,reject) => { rejectPlayer = reject; }),new Promise((_,reject) => { timer = setTimeout(() => reject(Error('Live did not reply. Check the return in Live before trying again.')),11000); })]);
+            // Validate against a fresh Live read, then Max checks again at its write boundary.
+            const removed = new Promise((_,reject) => { rejectPlayer = reject; });
+            const timeout = new Promise((_,reject) => { timer = setTimeout(() => reject(Error('Live did not reply. Check the return in Live before trying again.')),11000); });
+            const current = await Promise.race([bridge.playerOutputs(),removed,timeout]);
+            if (!current || !current.ok) return reply(res,409,current && current.message || 'Could not read Live outputs');
+            const existing = matchReturn(current.outputs.returns,value.sendName);
+            if (!existing && (value.explicitOutput !== true || !value.typeId || !value.channelId)) return reply(res,400,'Choose an explicit output before adding a new return');
+            if (value.reroute === true) {
+              const seen = value.expectedRouting;
+              if (!existing || value.explicitOutput !== true || !value.typeId || !value.channelId || !seen || seen.typeId === undefined || seen.channelId === undefined || seen.typeId === null || seen.channelId === null || seen.index !== existing.index || seen.name !== existing.name || String(seen.typeId) !== String((existing.type || {}).identifier) || String(seen.channelId) !== String((existing.channel || {}).identifier)) return reply(res,409,'Return routing changed; refresh outputs and choose again');
+            }
+            const result = await Promise.race([bridge.addPlayer(value),removed,timeout]);
             if (!result || !result.ok) return reply(res,409,result && result.message || 'Live did not confirm the player');
             if (typeof result.returnName !== 'string' || !result.returnName.trim() || result.returnName.length > 200) return reply(res,409,'Live returned an invalid name; no member added');
             const members = cfg.members.map(m => ({...m,mixes:[...m.mixes]}));
-            let member = members.find(m => m.name.toLowerCase() === value.name.trim().toLowerCase());
-            if (!member) { member = newMember(value.name.trim(),[]); members.push(member); }
+            let member = members.find(m => m.name.trim().toLowerCase() === value.name.toLowerCase());
+            if (!member) { member = newMember(value.name,[]); members.push(member); }
+            member.name = member.name.trim();
             if (!member.mixes.includes(result.returnName)) member.mixes.push(result.returnName);
             if (!validMembers(members)) return reply(res,409,'Member limit reached; return remains in Live');
             const next = {...cfg,members,accessEnabled:cfg.accessEnabled || cfg.members.length === 0};

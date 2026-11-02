@@ -21,7 +21,7 @@ function playerRequest(command, ...args) {
   });
 }
 bridge.playerOutputs = () => playerRequest('outputs');
-bridge.addPlayer = value => playerRequest('add',value.sendName,value.typeId,value.channelId);
+bridge.addPlayer = value => playerRequest('add',value.sendName,value.typeId,value.channelId,JSON.stringify({explicitOutput:value.explicitOutput === true,reroute:value.reroute === true,expectedRouting:value.expectedRouting}));
 max.addHandler('playerResult', async id => {
   const entry = playerRequests.get(id); if (!entry) { max.outlet('players','forget',id); return; }
   try { const dict = await max.getDict('setlist_touch_player_' + id); const result = JSON.parse(dict.result); clearTimeout(entry.timer); playerRequests.delete(id); entry.resolve(result); }
