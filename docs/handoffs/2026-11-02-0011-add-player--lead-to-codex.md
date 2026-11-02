@@ -7,7 +7,7 @@
 - **PR:** (opened by implementer)
 - **Base commit:** 6a1c9450a2e893ba2e010ad19d0a6611a0869cdb
 - **Port (if running a server):** 5310 (`SETLIST_TOUCH_PORT=5310 node device/dev.js`)
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 Admin adds a player from the web UI (creating or linking a named return, setting its Ext. Out, scoping the member), and players can raise the house reverb and delay in their own mix. Done means the plan's tasks and review focus are met, tests pass and a draft PR is open.
