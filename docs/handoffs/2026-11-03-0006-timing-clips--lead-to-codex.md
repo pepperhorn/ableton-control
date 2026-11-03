@@ -7,7 +7,7 @@
 - **PR:** (opened by implementer)
 - **Base commit:** 18e298309c86e909be121e8051bbc95198a82dcc
 - **Port (if running a server):** 5260
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 Bind timing to the device's own track and add an admin "Build timing clips" action that fills empty device-track slots with empty MIDI clips sized to each row's longest loop. Plus the no-songs message. Done means the plan's review focus is tested, tests pass and a draft PR is open.
