@@ -56,7 +56,6 @@ test('port change relistens and occupied port preserves config',async t=>{
 
 const mixFixture=require('../device/lib/fixture-mix.json');
 const sendBody=value=>({trackIndex:0,returnIndex:2,rawName:'+ DRUMS',returnName:'Shaun',value});
-const wait=ms=>new Promise(r=>setTimeout(r,ms));
 test('send validates names, return routing and numeric range',async t=>{
  const {port,bridge}=await setup(t);const calls=[];bridge.setSend=(...args)=>calls.push(args);bridge.emit('mix',mixFixture);
  a.equal((await req(port,'/api/send',sendBody(0.6))).status,204);
@@ -65,16 +64,21 @@ test('send validates names, return routing and numeric range',async t=>{
  for(const value of [1.5,-0.1,NaN,'0.5',null])a.equal((await req(port,'/api/send',sendBody(value))).status,400);
 });
 test('send coalesces a burst and retains the final value',async t=>{
+ // Freeze application time while HTTP requests run; advance only at the assertion boundary.
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:100000});
  const {port,bridge}=await setup(t);const calls=[];bridge.setSend=(...args)=>calls.push(args);bridge.emit('mix',mixFixture);
  const results=await Promise.all(Array.from({length:10},(_,i)=>req(port,'/api/send',sendBody(i/10))));
- a.ok(results.every(r=>r.status===204));await wait(45);
- a.ok(calls.length<=2);a.equal(calls[calls.length-1][2],0.9);
+ a.ok(results.every(r=>r.status===204));a.equal(calls.length,1);
+ t.mock.timers.tick(32);a.equal(calls.length,1);t.mock.timers.tick(1);
+ a.equal(calls.length,2);a.equal(calls[calls.length-1][2],0.9);
 });
 test('queued sends are discarded when a target changes',async t=>{
+ // Freeze application time while HTTP requests run; advance only at the assertion boundary.
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:100000});
  const {port,bridge}=await setup(t);const calls=[];bridge.setSend=(...args)=>calls.push(args);bridge.emit('mix',mixFixture);
  await req(port,'/api/send',sendBody(0.6));await req(port,'/api/send',sendBody(0.7));
  bridge.emit('mix',{...mixFixture,tracks:mixFixture.tracks.map(t=>t.index===0?{...t,name:'+ Renamed'}:t)});
- await wait(45);a.deepEqual(calls,[[0,2,0.6]]);
+ t.mock.timers.tick(33);a.deepEqual(calls,[[0,2,0.6]]);
 });
 test('SSE sends mix on connect and level changes persist for later clients',async t=>{
  const {port,bridge}=await setup(t);bridge.emit('mix',mixFixture);
@@ -117,6 +121,8 @@ test('transport validates all commands and bridges explicit record targets',asyn
  a.deepEqual(calls,[['play',undefined],['stop',undefined],['record',1],['record',1],['record',0]]);
 });
 test('transport snapshot waits for Live, replays latest state on connect and coalesces updates',async t=>{
+ // Freeze application time while HTTP requests run; advance only at the assertion boundary.
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:100000});
  const {port,bridge}=await setup(t);const s=stream(port);t.after(()=>s.request.destroy());await s.ready;await req(port,'/');
  a.equal(s.events.filter(e=>e.startsWith('event: transport')).length,0);
  bridge.emit('transport',transportState);await req(port,'/');
@@ -124,7 +130,7 @@ test('transport snapshot waits for Live, replays latest state on connect and coa
  for(let i=0;i<20;i++)bridge.emit('transport',{...transportState,current_song_time:i});
  const later=stream(port);t.after(()=>later.request.destroy());await later.ready;await req(port,'/');
  a.equal(JSON.parse(later.events.find(e=>e.startsWith('event: transport')).split('data: ')[1]).current_song_time,19);
- await wait(120);const updates=s.events.filter(e=>e.startsWith('event: transport'));a.equal(updates.length,2);
+ t.mock.timers.tick(100);await req(port,'/');const updates=s.events.filter(e=>e.startsWith('event: transport'));a.equal(updates.length,2);
  a.equal(JSON.parse(updates[1].split('data: ')[1]).current_song_time,19);
  bridge.emit('transport',{});await req(port,'/');a.equal(s.events.filter(e=>e.startsWith('event: transport')).length,2);
 });
@@ -306,24 +312,28 @@ test('members mutations broadcast access, preserve ids, revoke cookies and flag 
  const removed=JSON.parse((await req(port,'/api/me',undefined,{...phone,Cookie:cookie})).data);a.equal(removed.kind,'none');a.equal(removed.accessEnabled,true);
 });
 test('send uses authoritative return index, fails closed after rename and revokes pending sends',async t=>{
+ // Freeze application time while HTTP requests run; advance only at the assertion boundary.
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:100000});
  const {port,phone,bridge,calls}=await accessSetup(t);
  const player={...phone,Cookie:cookieOf(await req(port,'/api/identify',{memberId:'alex'},phone))};
  a.equal((await req(port,'/api/send',{...sendBody(0.4),returnIndex:3,returnName:'Shaun'},player)).status,403);
  a.equal((await req(port,'/api/send',sendBody(0.4),player)).status,204);
  a.equal((await req(port,'/api/send',sendBody(0.5),player)).status,204);
- await req(port,'/api/members',{members:[]});await wait(45);a.deepEqual(calls,[[0,2,0.4]]);
+ await req(port,'/api/members',{members:[]});t.mock.timers.tick(33);a.deepEqual(calls,[[0,2,0.4]]);
  await req(port,'/api/members',{members:[{id:'alex',name:'Alex',pages:['monitor'],mixes:['Shaun']}]});
  bridge.emit('mix',{...mixFixture,returns:mixFixture.returns.map(r=>r.index===2?{...r,name:'Renamed'}:r)});
  a.equal((await req(port,'/api/send',sendBody(0.7),player)).status,403);
 });
 test('coalesced sends retain the identity of the latest sender',async t=>{
+ // Freeze application time while HTTP requests run; advance only at the assertion boundary.
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:100000});
  const {port,phone,calls}=await accessSetup(t);
  await req(port,'/api/members',{members:['alex','second'].map(id=>({id,name:id,pages:['monitor'],mixes:['Shaun']}))});
  const player=async id=>({...phone,Cookie:cookieOf(await req(port,'/api/identify',{memberId:id},phone))});
  const first=await player('alex'),second=await player('second');
  await req(port,'/api/send',sendBody(0.2),first);await req(port,'/api/send',sendBody(0.3),first);await req(port,'/api/send',sendBody(0.8),second);
  await req(port,'/api/members',{members:[{id:'second',name:'second',pages:['monitor'],mixes:['Shaun']}]});
- await wait(45);a.equal(calls.at(-1)[2],0.8);
+ t.mock.timers.tick(33);a.equal(calls.at(-1)[2],0.8);
 });
 
 test('password rotation revokes an already signed-in phone admin at both read endpoints',async t=>{
@@ -457,4 +467,32 @@ test('server refuses A Gtr reroute even with a genuine observed E Gtr route',asy
  const {port,bridge}=await setup(t);const ret={index:1,name:'E Gtr',type:{identifier:'ext'},channel:{identifier:'3/4'}};bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[ret]}});let calls=0;bridge.addPlayer=()=>calls++;
  const expectedRouting={index:1,name:ret.name,typeId:'ext',channelId:'3/4'};
  a.equal((await req(port,'/api/players',{...playerBody,sendName:'A Gtr',reroute:true,expectedRouting})).status,409);a.equal(calls,0);
+});
+
+test('timing builder requires admin including open phones, and checks Origin',async t=>{
+ const {port,bridge}=await setup(t,'192.168.1.20');let calls=0;bridge.buildTiming=async()=>{calls++;return {ok:true};};
+ const auth={Authorization:'Basic '+Buffer.from('band:pw').toString('base64')};
+ a.equal((await req(port,'/api/timing-clips',{confirmPlaying:true},auth)).status,403);
+ const local=await setup(t);local.bridge.buildTiming=bridge.buildTiming;
+ a.equal((await req(local.port,'/api/timing-clips',{confirmPlaying:true},{Origin:'http://evil.example'})).status,403);a.equal(calls,0);
+});
+test('timing build rejects indexing, concurrent requests and unconfirmed playback; streams progress and result',async t=>{
+ const {port,bridge}=await setup(t);let finish,calls=0;
+ bridge.buildTiming=()=>{calls++;return new Promise(resolve=>finish=resolve);};
+ a.equal((await req(port,'/api/timing-clips',{})).status,409);
+ bridge.emit('progress',{done:0,total:683});a.equal((await req(port,'/api/timing-clips',{confirmPlaying:true})).status,409);
+ bridge.emit('progress',{done:683,total:683});
+ const pending=req(port,'/api/timing-clips',{confirmPlaying:true});
+ while(!finish)await new Promise(resolve=>setImmediate(resolve));
+ a.equal((await req(port,'/api/timing-clips',{confirmPlaying:true})).status,409);a.equal(calls,1);
+ bridge.emit('timingProgress',{done:12,total:683});
+ const s=stream(port);await s.ready;await req(port,'/');a.match(s.events.find(e=>e.startsWith('event: timing')),/"running":true/);s.request.destroy();
+ finish({ok:true,created:2,existing:5,noSource:3,done:10,total:10});a.equal((await pending).status,200);
+ const late=stream(port);await late.ready;await req(port,'/');a.match(late.events.find(e=>e.startsWith('event: timing')),/"created":2/);late.request.destroy();
+});
+test('timing route permits stopped Live without playback confirmation and reports failure',async t=>{
+ const {port,bridge}=await setup(t);bridge.emit('transport',{is_playing:0,record_mode:0,tempo:120,current_song_time:0,signature_numerator:4,signature_denominator:4});
+ bridge.buildTiming=async()=>({ok:false,message:'Device removed',created:2,existing:0,noSource:0});
+ const result=await req(port,'/api/timing-clips',{});a.equal(result.status,409);a.match(result.data,/Device removed/);
+ bridge.buildTiming=async()=>{throw Error('Live stopped replying');};a.match((await req(port,'/api/timing-clips',{})).data,/stopped replying/);
 });

@@ -187,6 +187,32 @@
    },
    {
     "box": {
+     "id": "timing-route",
+     "maxclass": "newobj",
+     "patching_rect": [
+      1000,
+      450,
+      220,
+      22
+     ],
+     "text": "route timing"
+    }
+   },
+   {
+    "box": {
+     "id": "timing-defer",
+     "maxclass": "newobj",
+     "patching_rect": [
+      1000,
+      490,
+      220,
+      22
+     ],
+     "text": "deferlow"
+    }
+   },
+   {
+    "box": {
      "id": "transport-route",
      "maxclass": "newobj",
      "patching_rect": [
@@ -987,6 +1013,42 @@
      "source": [
       "player-route",
       2
+     ],
+     "destination": [
+      "timing-route",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "timing-route",
+      0
+     ],
+     "destination": [
+      "timing-defer",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "timing-defer",
+      0
+     ],
+     "destination": [
+      "lom",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "timing-route",
+      1
      ],
      "destination": [
       "transport-route",

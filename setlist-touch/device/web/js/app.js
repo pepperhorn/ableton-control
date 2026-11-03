@@ -1,3 +1,4 @@
+import {noSongsMessage} from './timing-view.js';
 import {createTransportRenderer} from './transport-render.js';
 import {createTapDetector} from './tap.js';
 import {initialMixState, reduceMix} from './mix-view.js';
@@ -14,6 +15,7 @@ let pageFor = page => allowedPages().includes(page) ? page : allowedPages()[0];
 let allowedTabs = value => local ? value.returns : [];
 let prefs = {}; try { prefs = JSON.parse(localStorage.getItem('setlist-touch') || '{}') || {}; } catch (_) {}
 let state = initialState(prefs), set = {songs:[],categories:[],sceneToSong:{}}, play = {playing:-1,fired:-1,playingSongId:null}, pos = null;
+let receivedEmpty = false, timingState = null, timingRequest = false;
 let snapshot = false, initialPlay = false, transport = false, mixSnapshot = false;
 let mix = {returns:[],strips:[]}, mixState = initialMixState(prefs), mixJSON = null;
 let setJSON = null, indexProgress = null, transportState = null, playSnapshot = false, monitorSongs = [];
@@ -85,6 +87,13 @@ function shell() {
     $('.index-progress-track').setAttribute('aria-valuenow', String(percent));
     $('.index-progress-track').setAttribute('aria-valuetext', `${indexProgress.done} of ${indexProgress.total} scenes`);
   }
+  const emptyMessage = noSongsMessage({connected:transport,receivedEmpty,indexing});
+  if (emptyMessage) {
+    $('.connection-bar').hidden = false;
+    $('.connection-label').textContent = emptyMessage;
+  }
+  $('.timing-panel').hidden = !settingsOpen || me.kind !== 'admin';
+  $('.timing-build').disabled = timingRequest || !!(timingState && timingState.running) || !!indexing || !transport;
   mixUI.syncAvailability(); transportUI.syncAvailability();
 }
 function dispatchMix(action) {
@@ -150,8 +159,8 @@ $('.scene-list').addEventListener('mousedown',e=>e.preventDefault());
 new ResizeObserver(fitSceneRows).observe($('.scene-list'));
 const events = new EventSource('/api/events');
 events.addEventListener('access',()=>{accessUI.invalidate();refreshMe().catch(()=>status('Could not refresh access.'));});
-events.addEventListener('open',()=>{refreshMe().catch(()=>status('Could not load access.'));transportState=null;playSnapshot=false;transportUI.reset();transport=true;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
-events.addEventListener('error',()=>{transportState=null;playSnapshot=false;transportUI.reset();transport=false;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
+events.addEventListener('open',()=>{refreshMe().catch(()=>status('Could not load access.'));transportState=null;playSnapshot=false;transportUI.reset();transport=true;receivedEmpty=false;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
+events.addEventListener('error',()=>{transportState=null;playSnapshot=false;transportUI.reset();transport=false;receivedEmpty=false;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
 events.addEventListener('transport',e=>{transportState=JSON.parse(e.data);transportUI.accept(transportState);paintMonitor();});
 events.addEventListener('mix',e=>acceptMix(JSON.parse(e.data)));
 events.addEventListener('level',e=>{
@@ -166,7 +175,7 @@ events.addEventListener('effectLevel',e=>{
 });
 events.addEventListener('progress',e=>{indexProgress=JSON.parse(e.data);shell();});
 events.addEventListener('set',e=>{
-  const next=JSON.parse(e.data); monitorSongs=next.songs;
+  const next=JSON.parse(e.data); monitorSongs=next.songs; receivedEmpty=!next.songs.length;
   // Keep the last song visible, but never enable launching from an empty set.
   if(!next.songs.length){snapshot=false;dispatch({type:'connected',value:false});return;}
   snapshot=true;
@@ -202,3 +211,27 @@ $('.settings-form').addEventListener('submit',async e=>{
   catch(error){$('.settings-status').textContent=error.message||'Could not save settings.';}
   finally{button.disabled=false;}
 });
+
+function showTiming(value) {
+  timingState = value;
+  $('.timing-status').textContent = value.running ? `Building timing clips ${value.done} / ${value.total}` :
+    `${value.message || (value.ok ? 'Build complete.' : 'Build stopped.')} ${value.created === undefined ? '' : `Created ${value.created}; skipped (already had a clip) ${value.existing}; skipped (no source clip) ${value.noSource}.${value.unnamed ? ` Warning: ${value.unnamed} clip name(s) could not be confirmed; check them in Live.` : ''}`}`;
+  shell();
+}
+events.addEventListener('timing', e => showTiming(JSON.parse(e.data)));
+$('.timing-build').onclick = async () => {
+  if (!confirm('Build timing clips in empty slots? Existing clips will be kept.')) return;
+  let confirmPlaying = false;
+  if (!transportState || transportState.is_playing) {
+    if (!confirm('Live is playing. Build timing clips while playing?')) return;
+    confirmPlaying = true;
+  }
+  timingRequest = true; shell();
+  try {
+    const res = await fetch('/api/timing-clips',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmPlaying})});
+    const raw = await res.text();
+    let result; try { result = JSON.parse(raw); } catch (_) { result = {ok:false,message:raw}; }
+    showTiming(result);
+  } catch (_) { showTiming({ok:false,message:'Connection lost. Check timing clips in Live before trying again.'}); }
+  finally { timingRequest = false; shell(); }
+};
