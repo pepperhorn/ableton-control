@@ -131,3 +131,12 @@ test('cancelled timing confirmation makes no POST and admin controls stay hidden
  await h.get('.timing-build').onclick();a.equal(h.posts.length,0);
  const phone=shellHarness();phone.location.hash='#admin';phone.hooks.shell();a.equal(phone.get('.timing-panel').hidden,true);
 });
+
+
+test('timing form displays fallback refusal and nonfatal name warnings from result events',()=>{
+ const h=shellHarness({local:true});
+ h.events.emit('timing',{data:JSON.stringify({running:false,ok:false,message:'Timing clips need the device on its own MIDI track. Build refused.'})});
+ a.match(h.get('.timing-status').textContent,/own MIDI track/);
+ h.events.emit('timing',{data:JSON.stringify({running:false,ok:true,created:3,existing:0,noSource:0,unnamed:2})});
+ a.match(h.get('.timing-status').textContent,/Build complete/);a.match(h.get('.timing-status').textContent,/Warning: 2 clip name/);
+});

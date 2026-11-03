@@ -215,7 +215,7 @@ $('.settings-form').addEventListener('submit',async e=>{
 function showTiming(value) {
   timingState = value;
   $('.timing-status').textContent = value.running ? `Building timing clips ${value.done} / ${value.total}` :
-    `${value.message || (value.ok ? 'Build complete.' : 'Build stopped.')} ${value.created === undefined ? '' : `Created ${value.created}; skipped (already had a clip) ${value.existing}; skipped (no source clip) ${value.noSource}.`}`;
+    `${value.message || (value.ok ? 'Build complete.' : 'Build stopped.')} ${value.created === undefined ? '' : `Created ${value.created}; skipped (already had a clip) ${value.existing}; skipped (no source clip) ${value.noSource}.${value.unnamed ? ` Warning: ${value.unnamed} clip name(s) could not be confirmed; check them in Live.` : ''}`}`;
   shell();
 }
 events.addEventListener('timing', e => showTiming(JSON.parse(e.data)));

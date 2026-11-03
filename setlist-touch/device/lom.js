@@ -5,7 +5,7 @@ outlets = 1;
 var CHUNK = 3, SLICE_MS = 15, PROGRESS_MS = 120, SWEEP_MS = 1000;
 var root = null, scenesDict = null, work = null, sweep = null, retry = null;
 var rootObservers = [], sceneObservers = [], trackObservers = [], retired = [];
-var positionObserver = null, timingPath = null, timingCount = 0;
+var positionObserver = null, timingPath = null, timingCount = 0, timingOwn = false;
 var rows = [], overrides = [], playing = -1, fired = -1;
 var positionKey = '', rowsJSON = null, active = false, subscribing = false;
 var scan = null, generation = 0, dirtyScenes = {}, dirtyTiming = {}, sweepIndex = 0;
@@ -141,17 +141,31 @@ function rebuild() {
     progressElapsed = 0; progress(0, timingCount);
     requestWork(); playbackChanged();
 }
+function resolveOwnTrack(ids) {
+    var parent = null;
+    try {
+        parent = new LiveAPI('this_device canonical_parent');
+        var id = Number(parent.id);
+        if (!(id > 0)) return null;
+        for (var i = 0; i < ids.length; i += 2)
+            if (Number(ids[i + 1]) === id) return 'live_set tracks ' + (i / 2);
+    } catch (e) {} finally { release(parent); }
+    return null;
+}
+function timingRefused(id) {
+    var message = 'Timing clips need the device on its own MIDI track. Fallback timing is read only; Build refused.';
+    post('Setlist Touch: ' + message + '\n');
+    timingReport(id, {ok:false, message:message});
+}
 function bindTiming() {
     var count = root.getcount('tracks');
     releaseAll(trackObservers); release(positionObserver); positionObserver = null; positionKey = '';
-    var parent = null, index = -1, ids = root.get('tracks');
+    var ids = root.get('tracks');
     trackIds = String(ids);
-    try {
-        parent = new LiveAPI('this_device canonical_parent');
-        for (var i = 0; i < ids.length; i += 2) if (Number(ids[i + 1]) === Number(parent.id)) index = i / 2;
-    } catch (e) {} finally { release(parent); }
-    if (index < 0) post('Setlist Touch: device is not on a regular track; timing falls back to last regular track\n');
-    timingPath = count ? 'live_set tracks ' + (index < 0 ? count - 1 : index) : null;
+    var ownPath = resolveOwnTrack(ids);
+    timingOwn = ownPath !== null;
+    if (!timingOwn) post('Setlist Touch: device is not on a regular track; timing falls back to last regular track (read only)\n');
+    timingPath = timingOwn ? ownPath : count ? 'live_set tracks ' + (count - 1) : null;
     if (timingPath) {
         watch(timingPath, 'playing_slot_index', playbackChanged, trackObservers);
         watch(timingPath, 'fired_slot_index', playbackChanged, trackObservers);
@@ -172,6 +186,7 @@ function retryRebuild() {
     try { rebuild(); } catch (e) { workFailed(e); }
 }
 function workFailed(error) {
+    stopBuild('Build stopped after scene refresh error: ' + error);
     work.cancel(); retryPending = true;
     post('Setlist Touch refresh (retry in ' + retryDelay + ' ms): ' + error + '\n');
     retry.cancel(); retry.schedule(retryDelay); retryDelay = Math.min(8000, retryDelay * 2);
@@ -180,7 +195,10 @@ function hasEntries(map) { for (var key in map) if (map.hasOwnProperty(key)) ret
 function workTick() {
     if (!active || retryPending) return;
     try {
-        if (build) { buildTick(); return; }
+        // Alternate whole slices so normal scene/priority work is never stacked
+        // on a build slice, and neither queue can starve the other.
+        if (build && !buildNormalTurn) { buildNormalTurn = true; buildTick(); return; }
+        buildNormalTurn = false;
         // At most 30 releases (60 property/id writes), with no scene reads this tick.
         if (retired.length) {
             for (var r = 0; r < CHUNK * 10 && retired.length; r++) release(retired.pop());
@@ -221,14 +239,14 @@ function workTick() {
             playbackPending = true; requestWork(); return;
         }
         if (!scan) { publish(); retryDelay = 1000; }
-        if (scan || hasEntries(dirtyScenes) || hasEntries(dirtyTiming) || hasEntries(priorityTiming)) requestWork();
+        if (build || scan || hasEntries(dirtyScenes) || hasEntries(dirtyTiming) || hasEntries(priorityTiming)) requestWork();
     } catch (e) {
         workFailed(e);
     }
 }
 function sweepTick() {
     if (!active) return;
-    if (!retryPending && !scan && !build && rows.length) {
+    if (!retryPending && !scan && rows.length) {
         for (var i = 0; i < CHUNK; i++) {
             dirtyTiming[sweepIndex] = true; sweepIndex = (sweepIndex + 1) % rows.length;
         }
@@ -300,7 +318,7 @@ function notifydeleted() {
     // Max destroys the js-owned LiveAPI objects. Guards above make callbacks inert;
     // explicit refresh still drains obsolete scene subscriptions in bounded slices.
     rootObservers = []; sceneObservers = []; trackObservers = []; retired = [];
-    root = null; positionObserver = null; positionKey = ''; timingPath = null; timingCount = 0;
+    root = null; positionObserver = null; positionKey = ''; timingPath = null; timingCount = 0; timingOwn = false;
     rows = []; overrides = []; scan = null; playing = -1; fired = -1; rowsJSON = null;
     dirtyScenes = {}; dirtyTiming = {}; priorityTiming = {}; sweepIndex = 0; playbackPending = false;
     retryPending = false; lastProgress = null; sceneIds = '';
@@ -308,7 +326,7 @@ function notifydeleted() {
 
 // The builder shares work with indexing: six source tracks OR one commit per tick.
 // No automatic retries after a mutation: a failed build reports its partial counts.
-var build = null, buildReplies = {};
+var build = null, buildReplies = {}, buildNormalTurn = false;
 function timingCancel(id) { if (build && build.id === id) { stopBuild('Build cancelled after reply timeout'); requestWork(); } }
 function timingForget(id) { delete buildReplies[id]; }
 function timingReport(id, result) {
@@ -322,11 +340,11 @@ function buildProgress() {
 function stopBuild(message) {
     if (!build) return;
     var b = build; build = null;
-    if (b.undo) try { root.call('end_undo_step'); } catch (e) { post('Setlist Touch: timing clip undo end unavailable\n'); }
     timingReport(b.id, {ok:!message, message:message || '', created:b.created,
-        existing:b.existing, noSource:b.noSource, done:b.row, total:b.total});
+        existing:b.existing, noSource:b.noSource, unnamed:b.unnamed, done:b.row, total:b.total});
 }
 function timingBuild(id, confirmPlaying) {
+    if (!timingOwn) { timingRefused(id); return; }
     if (build || scan || retryPending || !active || !timingPath) {
         timingReport(id, {ok:false, message:'Indexing or another build is in progress; wait until Live is ready'}); return;
     }
@@ -337,20 +355,24 @@ function timingBuild(id, confirmPlaying) {
         if (String(root.get('scenes')) !== sceneIds || String(root.get('tracks')) !== trackIds) {
             timingReport(id, {ok:false, message:'Set structure changed; wait for indexing'}); return;
         }
+        if (resolveOwnTrack(root.get('tracks')) !== timingPath) { timingRefused(id); return; }
         var track = new LiveAPI(timingPath), midi;
         try { midi = Number(scalar(track, 'has_midi_input')) === 1; } finally { release(track); }
         if (!midi) { timingReport(id, {ok:false, message:'Timing track must be a MIDI track'}); return; }
         build = {id:id, row:0, total:timingCount, tracks:root.getcount('tracks'), track:0,
             scenes:String(root.get('scenes')), ids:String(root.get('tracks')), path:timingPath,
-            longest:0, phase:'start', created:0, existing:0, noSource:0, elapsed:0, undo:false};
-        try { root.call('begin_undo_step'); build.undo = true; }
-        catch (e) { post('Setlist Touch: timing clip undo grouping unavailable\n'); }
+            own:timingOwn, longest:0, phase:'start', created:0, existing:0, noSource:0, unnamed:0, elapsed:0};
+        buildNormalTurn = false;
         buildProgress(); requestWork();
     } catch (e) { if (build) stopBuild(String(e)); else timingReport(id, {ok:false,message:String(e)}); }
 }
 function buildTick() {
     var b = build, slot = null, clip = null;
     try {
+        if (!b.own || !timingOwn || timingPath !== b.path || resolveOwnTrack(root.get('tracks')) !== b.path) {
+            post('Setlist Touch: timing clips need the device on its own MIDI track; build stopped\n');
+            stopBuild('Timing clips need the device on its own MIDI track; build stopped'); requestWork(); return;
+        }
         if (String(root.get('scenes')) !== b.scenes || String(root.get('tracks')) !== b.ids) {
             stopBuild('Set structure changed; build stopped'); requestWork(); return;
         }
@@ -386,8 +408,15 @@ function buildTick() {
                 if (Number(scalar(slot, 'has_clip')) !== 1) throw Error('Live did not confirm clip creation; check the slot in Live');
                 b.created++; // Count creation even if the subsequent name set fails.
                 clip = new LiveAPI(path + ' clip');
-                clip.set('name', '⏱ ' + (b.longest / rows[b.row].beatsPerBar) + ' bars');
-                if (text(clip, 'name') !== '⏱ ' + (b.longest / rows[b.row].beatsPerBar) + ' bars') throw Error('Live did not confirm clip name');
+                var name = '\u23f1 ' + (Math.round(b.longest / rows[b.row].beatsPerBar * 100) / 100) + ' bars';
+                // Naming is cosmetic. A missing/normalised name must not stop a build.
+                try {
+                    clip.set('name', name);
+                    if (text(clip, 'name') !== name) throw Error('name readback mismatch');
+                } catch (nameError) {
+                    b.unnamed++;
+                    post('Setlist Touch: timing clip name warning at scene ' + b.row + ': ' + nameError + '\n');
+                }
                 dirtyTiming[b.row] = true;
             }
             finishBuildRow();

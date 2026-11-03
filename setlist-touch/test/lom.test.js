@@ -1,5 +1,6 @@
 const {test}=require('node:test');const a=require('node:assert/strict');const vm=require('vm'),fs=require('fs'),path=require('path');
 function harness(size){
+ const behavior={nameOf:value=>value};
  const outputs=[],calls=[],observers=[],tasks=[],dict={},logs=[],gets=[],writes=[];let created=0, operations=0, now=0; const ticks=[],progressTimes=[],failGets={};
  const data={'this_device canonical_parent':{id:21},live_set:{is_playing:0,scenes:['id',10,'id',11,'id',12],tracks:['id',20,'id',21],signature_numerator:4,signature_denominator:4},
  'live_set scenes 0':{name:'* RISE >>',color:0xffffff,time_signature_enabled:0},
@@ -19,7 +20,7 @@ function harness(size){
    data['live_set tracks 1 clip_slots '+i+' clip']={is_audio_clip:1,warping:1,loop_start:4,loop_end:132,playing_position:46};
   }
  }
- function LiveAPI(callback,p){created++;operations++;this.path=typeof callback==='string'?callback:p;this.callback=typeof callback==='function'?callback:null;this._id=(data[this.path]||{}).id||1;Object.defineProperty(this,'id',{get:()=>this._id,set:v=>{operations++;this._id=v;}});this.get=prop=>{operations++;gets.push([this.path,prop]);if(failGets[this.path+':'+prop]>0){failGets[this.path+':'+prop]--;throw Error('Persistent read failure');}if(!data[this.path]||!(prop in data[this.path]))throw new Error('Unknown '+this.path+' '+prop);const v=data[this.path][prop];return Array.isArray(v)?v:[v];};this.getcount=prop=>{operations++;return data[this.path][prop].length/2;};this.call=(...args)=>{operations++;calls.push([this.path,...args]);if(args[0]==='create_clip'){data[this.path].has_clip=1;data[this.path+' clip']={is_audio_clip:0,loop_start:0,loop_end:args[1]};}};this.set=(prop,value)=>{operations++;data[this.path][prop]=value;};Object.defineProperty(this,'property',{get:()=>this._property,set:v=>{operations++;this._property=v; if(v&&this.callback)this.callback([v]);}});if(this.callback)observers.push(this);}
+ function LiveAPI(callback,p){created++;operations++;this.path=typeof callback==='string'?callback:p;this.callback=typeof callback==='function'?callback:null;this._id=(data[this.path]||{}).id === undefined ? 1 : data[this.path].id;Object.defineProperty(this,'id',{get:()=>this._id,set:v=>{operations++;this._id=v;}});this.get=prop=>{operations++;gets.push([this.path,prop]);if(failGets[this.path+':'+prop]>0){failGets[this.path+':'+prop]--;throw Error('Persistent read failure');}if(!data[this.path]||!(prop in data[this.path]))throw new Error('Unknown '+this.path+' '+prop);const v=data[this.path][prop];return Array.isArray(v)?v:[v];};this.getcount=prop=>{operations++;return data[this.path][prop].length/2;};this.call=(...args)=>{operations++;calls.push([this.path,...args]);if(args[0]==='create_clip'){data[this.path].has_clip=1;data[this.path+' clip']={is_audio_clip:0,loop_start:0,loop_end:args[1]};}};this.set=(prop,value)=>{operations++;data[this.path][prop]=prop==='name'?behavior.nameOf(value):value;};Object.defineProperty(this,'property',{get:()=>this._property,set:v=>{operations++;this._property=v; if(v&&this.callback)this.callback([v]);}});if(this.callback)observers.push(this);}
  function Task(fn,context){this.fn=fn.bind(context);this.schedule=ms=>{this.pending=true;this.due=now+ms;};this.cancel=()=>{this.pending=false;this.repeating=false;};tasks.push(this);}
  function Dict(){this.set=(key,value)=>{dict[key]=value;writes.push([key,value]);};}
  const ctx=vm.createContext({LiveAPI,Task,Dict,outlet:(...args)=>{outputs.push(args);if(args[1]==='progress')progressTimes.push(now);},post:message=>logs.push(message)});
@@ -42,7 +43,7 @@ function harness(size){
   // Model the host freeing subscriptions when the js object is destroyed.
   observers.forEach(o=>o._id=0);
  };
- return {destroy,failGets,get operations(){return operations;},get now(){return now;},ctx,data,outputs,calls,observers,tasks,dict,logs,gets,writes,flush,tick,ticks,progressTimes,advance,changed,get created(){return created;}};
+ return {behavior,destroy,failGets,get operations(){return operations;},get now(){return now;},ctx,data,outputs,calls,observers,tasks,dict,logs,gets,writes,flush,tick,ticks,progressTimes,advance,changed,get created(){return created;}};
 }
 test('LiveAPI stays lazy, reads scenes/signatures/loops and fires valid scenes',()=>{const h=harness();a.equal(h.created,0);h.ctx.refresh();h.flush();const raw=JSON.parse(h.dict.scenes);a.equal(raw.length,3);a.equal(raw[1].loopBeats,128);a.equal(raw[0].loopBeats,null);a.equal(raw[2].beatsPerBar,3);h.ctx.fire(1,'[N32] AA');h.ctx.fire(-1);h.ctx.fire(99);h.ctx.fire(1.5);a.deepEqual(h.calls,[['live_set scenes 1','fire']]);a.ok(h.outputs.some(o=>o[1]==='scenes'));a.ok(h.outputs.some(o=>o[1]==='pos'&&o[2]===1&&o[3]===46&&o[4]===4));});
 test('rename and signature observers rebuild without leaking observers',()=>{const h=harness();h.ctx.refresh();h.flush();const count=h.observers.filter(o=>o.id).length;h.data['live_set scenes 1'].name='RENAMED';h.changed('live_set scenes 1','name');a.equal(JSON.parse(h.dict.scenes)[1].name,'RENAMED');a.equal(h.observers.filter(o=>o.id).length,count);h.data.live_set.signature_numerator=3;h.changed('live_set','signature_numerator');a.equal(JSON.parse(h.dict.scenes)[1].beatsPerBar,3);});
@@ -242,7 +243,7 @@ test('builder chooses longest MIDI/warped loop, ignores unwarped and own track, 
  h.ctx.timingBuild(1,0);h.flush();a.equal(resultOf(h).created,2);a.equal(resultOf(h).noSource,1);
  a.equal(h.data['live_set tracks 1 clip_slots 0 clip'].loop_end,48);
  a.equal(h.data['live_set tracks 1 clip_slots 0 clip'].name,'⏱ 16 bars');
- a.equal(h.calls.filter(c=>c[1]==='begin_undo_step').length,1);a.equal(h.calls.filter(c=>c[1]==='end_undo_step').length,1);
+ a.equal(h.calls.filter(c=>/undo_step/.test(c[1])).length,0);
 });
 test('683 scene by 32 track build stays under 150 ops and three rows per tick',()=>{
  const h=buildHarness(683,32),start=h.now;h.ctx.timingBuild(1,0);h.flush();
@@ -274,13 +275,55 @@ test('device parent binding survives add/reorder/remove and fallback is logged',
  h.data.live_set.tracks=['id',21,'id',20,'id',22];h.ctx.tracksChanged();a.equal(h.ctx.timingPath,'live_set tracks 0');
  h.data.live_set.tracks=['id',20,'id',22];h.ctx.tracksChanged();a.equal(h.ctx.timingPath,'live_set tracks 1');a.match(h.logs.at(-1),/falls back/);
 });
-test('failed clip name leaves partial creation counted, closes undo, and never retries creation',()=>{
+test('unreadable clip name is a warning and does not stop or retry the build',()=>{
  const h=buildHarness();h.ctx.timingBuild(1,0);
  while(h.ctx.build.phase!=='create')a.ok(h.tick());
- const data=h.data;Object.defineProperty(data,'live_set tracks 1 clip_slots 0 clip',{get:()=>{throw Error('name unavailable');},set:()=>{},configurable:true});
- h.flush();a.equal(resultOf(h).ok,false);a.equal(resultOf(h).created,1);a.equal(h.calls.filter(c=>c[1]==='create_clip').length,1);a.equal(h.calls.at(-1)[1],'end_undo_step');
+ h.failGets['live_set tracks 1 clip_slots 0 clip:name']=1;
+ h.flush();a.equal(resultOf(h).ok,true);a.equal(resultOf(h).created,3);a.equal(resultOf(h).unnamed,1);
+ a.equal(h.calls.filter(c=>c[1]==='create_clip').length,3);a.equal(h.calls.filter(c=>/undo_step/.test(c[1])).length,0);
+ a.match(h.logs.at(-1),/name warning/);
 });
 test('builder rejects unobserved structure drift before starting',()=>{
  const h=buildHarness();h.data.live_set.tracks.reverse();h.ctx.timingBuild(1,0);
  a.equal(resultOf(h).ok,false);a.match(resultOf(h).message,/structure changed/);a.equal(h.ctx.build,null);
+});
+
+for(const [kind,id] of [['return',70],['Main',71],['rack',72],['unresolved',0],['lookup failure',null]]) {
+ test('read-only fallback refuses build on '+kind+' with form result and console reason',()=>{
+  const h=buildHarness();
+  if(id===null)Object.defineProperty(h.data['this_device canonical_parent'],'id',{get(){throw Error('unresolved path');}});
+  else h.data['this_device canonical_parent'].id=id;
+  h.ctx.bindTiming();a.equal(h.ctx.timingOwn,false);a.equal(h.ctx.timingPath,'live_set tracks 1');
+  h.ctx.timingBuild(1,0);a.equal(resultOf(h).ok,false);a.match(resultOf(h).message,/own MIDI track/);a.match(h.logs.at(-1),/Build refused/);
+  a.equal(h.calls.filter(c=>c[1]==='create_clip').length,0);
+  h.data['live_set tracks 1 clip_slots 0'].has_clip=1;
+  a.equal(h.ctx.loopAt(0),32); // Fallback remains a readable timing track.
+ });
+ test('canonical parent becoming '+kind+' before create stops all further writes',()=>{
+  const h=buildHarness();h.ctx.timingBuild(1,0);
+  while(h.ctx.build.phase!=='create')a.ok(h.tick());
+  if(id===null)Object.defineProperty(h.data['this_device canonical_parent'],'id',{get(){throw Error('unresolved path');}});
+  else h.data['this_device canonical_parent'].id=id;
+  h.flush();a.equal(resultOf(h).ok,false);a.match(resultOf(h).message,/own MIDI track/);
+  a.equal(h.calls.filter(c=>c[1]==='create_clip').length,0);
+ });
+}
+test('names retain stopwatch and use at most two decimals with no trailing zeros',()=>{
+ const h=buildHarness();[16,31.5,48].forEach((beats,i)=>h.data['live_set tracks 0 clip_slots '+i+' clip'].loop_end=4+beats);
+ h.ctx.timingBuild(1,0);h.flush();a.equal(resultOf(h).unnamed,0);
+ a.deepEqual([0,1,2].map(i=>h.data['live_set tracks 1 clip_slots '+i+' clip'].name),['⏱ 5.33 bars','⏱ 10.5 bars','⏱ 16 bars']);
+});
+test('normalised name readback warns for every clip but completes the build',()=>{
+ const h=buildHarness();h.behavior.nameOf=value=>value.replace('⏱','?');
+ h.ctx.timingBuild(1,0);h.flush();a.equal(resultOf(h).ok,true);a.equal(resultOf(h).created,3);a.equal(resultOf(h).unnamed,3);
+ a.equal(h.logs.filter(s=>/name warning/.test(s)).length,3);
+});
+test('dirty scenes and priority timing publish between build ticks within budget',()=>{
+ const h=buildHarness(683,32);h.ctx.timingBuild(1,0);h.tick();
+ h.data['live_set scenes 77'].name='Edited during build';h.ctx.sceneChanged(77,h.ctx.generation);
+ h.data['live_set tracks 1 clip_slots 78'].has_clip=1;h.ctx.priorityTiming[78]=2;
+ // One normal tick handles scene edit and priority; the following build tick keeps progressing.
+ h.tick();a.equal(JSON.parse(h.dict.scenes)[77].name,'Edited during build');a.equal(JSON.parse(h.dict.scenes)[78].loopBeats,32);
+ a.ok(h.ctx.build);a.equal(h.ctx.build.row,0);h.tick();a.equal(h.ctx.build.track,6);
+ h.flush();a.equal(resultOf(h).created,682);a.ok(h.ticks.every(t=>t.operations<=150&&t.sceneReads<=3));
 });
