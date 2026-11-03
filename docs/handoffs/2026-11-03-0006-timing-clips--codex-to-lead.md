@@ -6,7 +6,7 @@
 - **Dispatch/ack:** [lead-to-codex](2026-11-03-0006-timing-clips--lead-to-codex.md)
 - **Branch:** orch/0006-timing-clips
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-71353fff
-- **PR:** draft to be opened after this committed return; URL added below once created
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/9 (draft)
 - **Base commit:** 07c5cdbff2e4fb990c9f873688e28647e7070b5b (dispatch); specified code base 18e298309c86e909be121e8051bbc95198a82dcc is its ancestor
 - **Implementation commit:** b0e78ee
 - **Port:** 5260 (fixture stopped; browser tabs closed)
