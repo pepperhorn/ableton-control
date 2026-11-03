@@ -32,6 +32,7 @@ boxes=[
  obj('mix','js mix.js',500,320),obj('mix-dict','dict setlist_touch_mix',750,320),
  obj('player-route','route players effectSend',1000,300),obj('player-defer','deferlow',1000,340),
  obj('players','js players.js',1000,380),obj('effect-defer','deferlow',700,380),obj('effect-send','prepend effectSend',700,420),
+ obj('timing-route','route timing',1000,450),obj('timing-defer','deferlow',1000,490),
  obj('transport-route','route transport',1000,120),obj('transport-defer','deferlow',1000,160),
  obj('transport','js transport.js',1000,240),
  obj('lom','js lom.js',20,240),obj('thisdevice','live.thisdevice',500,40),
@@ -55,7 +56,7 @@ lines=[line('node','route'),line('route','defer'),line('defer','fire'),line('fir
  line('refresh','mix'),line('ready','lom'),line('ready','mix'),line('ready','transport'),line('mix','node'),
  # Preserve existing selectors; the unmatched outlet feeds the transport lane.
  line('route','index-status',5),line('index-status','address-set'),
- line('route','player-route',6),line('player-route','player-defer'),line('player-defer','players'),line('players','node'),line('refresh','players'),line('player-route','effect-defer',1),line('effect-defer','effect-send'),line('effect-send','mix'),line('player-route','transport-route',2),line('transport-route','transport-defer'),
+ line('route','player-route',6),line('player-route','player-defer'),line('player-defer','players'),line('players','node'),line('refresh','players'),line('player-route','effect-defer',1),line('effect-defer','effect-send'),line('effect-send','mix'),line('player-route','timing-route',2),line('timing-route','timing-defer'),line('timing-defer','lom'),line('timing-route','transport-route',1),line('transport-route','transport-defer'),
  line('transport-defer','transport'),line('refresh','transport'),line('transport','node')]
 data=json.dumps({'patcher':patch(boxes,lines,[100,100,1280,360],openinpresentation=1,devicewidth=330.0)},indent=1,ensure_ascii=False).encode('utf8')
 (HERE/'SetlistTouch.maxpat').write_bytes(data)

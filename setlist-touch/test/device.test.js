@@ -46,7 +46,7 @@ test('transport commands use deferlow and refresh/Node wiring; generator is dete
  const p=JSON.parse(fs.readFileSync(path.join(device,'SetlistTouch.maxpat'))).patcher;
  const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));
  a.equal(boxes['transport-route'].text,'route transport');a.equal(boxes['transport-defer'].text,'deferlow');a.equal(boxes.transport.text,'js transport.js');
- for(const [src,dst,outlet] of [['route','player-route',6],['player-route','transport-route',2],['transport-route','transport-defer',0],['transport-defer','transport',0],['refresh','transport',0],['transport','node',0]])
+ for(const [src,dst,outlet] of [['route','player-route',6],['player-route','timing-route',2],['timing-route','transport-route',1],['transport-route','transport-defer',0],['transport-defer','transport',0],['refresh','transport',0],['transport','node',0]])
   a.ok(p.lines.some(({patchline:l})=>l.source[0]===src&&l.source[1]===outlet&&l.destination[0]===dst));
  const files=['SetlistTouch.maxpat','SetlistTouch.amxd'],before=files.map(f=>fs.readFileSync(path.join(device,f)));
  require('child_process').execFileSync('python3',[path.join(device,'build_device.py')]);
@@ -101,4 +101,26 @@ test('player and effect commands are deferred and preserve selectors through ind
  const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));a.equal(boxes.players.text,'js players.js');a.equal(boxes['player-defer'].text,'deferlow');a.equal(boxes['effect-defer'].text,'deferlow');
  for(const [src,dst,outlet] of [['route','player-route',6],['player-route','player-defer',0],['player-defer','players',0],['players','node',0],['refresh','players',0],['player-route','effect-defer',1],['effect-defer','effect-send',0],['effect-send','mix',0]])a.ok(p.lines.some(({patchline:l})=>l.source[0]===src&&l.source[1]===outlet&&l.destination[0]===dst));
  for(const file of ['mix.js','players.js']) { const source=fs.readFileSync(path.join(device,file),'utf8');a.doesNotMatch(source,/\b(?:const|let|class)\s|=>|`/);new vm.Script(source); }
+});
+
+test('timing commands route through deferlow into the budgeted LOM worker, ES5',()=>{
+ const p=JSON.parse(fs.readFileSync(path.join(device,'SetlistTouch.maxpat'))).patcher;
+ const boxes=Object.fromEntries(p.boxes.map(({box})=>[box.id,box]));
+ a.equal(boxes['timing-route'].text,'route timing');a.equal(boxes['timing-defer'].text,'deferlow');
+ for(const [src,dst] of [['timing-route','timing-defer'],['timing-defer','lom']])a.ok(p.lines.some(({patchline:l})=>l.source[0]===src&&l.destination[0]===dst));
+ a.doesNotMatch(fs.readFileSync(path.join(device,'lom.js'),'utf8'),/\b(?:const|let|class)\s|=>|`/);
+});
+
+test('timing bridge forwards progress/status and request Dict result, forgets it and restores address',async()=>{
+ const outlets=[],handlers={};let bridge;
+ const max={outlet:(...args)=>outlets.push(args),addHandler:(name,fn)=>handlers[name]=fn,getDict:async()=>({result:JSON.stringify({ok:true,created:2,existing:1,noSource:0})})};
+ const req=name=>name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listen:()=>Promise.resolve(8765),getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
+ vm.runInNewContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'),{require:req,process:{on:()=>{}},setTimeout,clearTimeout});
+ await new Promise(r=>setImmediate(r));const address=outlets.find(o=>o[0]==='address')[1];
+ const pending=bridge.buildTiming({confirmPlaying:true});a.deepEqual(outlets.at(-1),['timing','timingBuild',1,1]);
+ a.equal((await bridge.buildTiming({})).ok,false);
+ let progress;bridge.on('timingProgress',v=>progress=v);handlers.timingProgress(1,3);
+ a.equal(progress.done,1);a.deepEqual(outlets.at(-1),['address','Building timing clips 1 / 3']);
+ await handlers.timingResult(1);a.equal((await pending).created,2);
+ a.ok(outlets.some(o=>o[0]==='timing'&&o[1]==='timingForget'&&o[2]===1));a.deepEqual(outlets.at(-1),['address',address]);
 });

@@ -1,3 +1,4 @@
+import {noSongsMessage} from '../device/web/js/timing-view.js';
 import {test} from 'node:test';import a from 'node:assert/strict';import fs from 'node:fs';
 const source=fs.readFileSync(new URL('../device/web/js/access-view.js',import.meta.url),'utf8');
 const {allowedPages,pageFor,allowedTabs,showPicker}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
@@ -31,7 +32,7 @@ function shellHarness({local=false,prefs={page:'mix',tab:'Keith'},config={}}={})
  const document={...target(),querySelector:get,querySelectorAll:()=>[],body:{dataset:{}}};
  const full={kind:local?'admin':'open',accessEnabled:false,pages:['monitor','scenes','transport'],mixes:'all',members:[]};
  const events=target();
- const ctx={...viewState,...mixView,document,location,window:target(),URLSearchParams,ResizeObserver:class{observe(){}},
+ const ctx={noSongsMessage,...viewState,...mixView,document,location,window:target(),URLSearchParams,ResizeObserver:class{observe(){}},
   localStorage:{getItem:()=>JSON.stringify(prefs),setItem:(k,v)=>storage.push(JSON.parse(v))},
   setTimeout:()=>0,clearTimeout(){},render(){},updatePlayback(){},fitSceneRows(){},
   createTapDetector:()=>({move(){}}),createTransportRenderer:()=>({syncAvailability(){},cancel(){},reset(){}}),
@@ -112,4 +113,21 @@ for(const backupAvailable of [true,false])test(`laptop Settings warns about dama
  h.location.hash='#settings';await h.hooks.settings();
  const warning=h.get('.settings-config-warning');a.equal(warning.hidden,false);a.match(warning.textContent,/missing members and passwords/);
  a.match(warning.textContent,backupAvailable?/config.json.damaged/:/Could not create a recovery copy/);
+});
+
+test('real app shows received-empty message only after index and hides it again on reconnect',async()=>{
+ const h=shellHarness({local:true});
+ h.events.emit('open');a.equal(h.get('.connection-label').textContent,'Waiting for Live set…');
+ h.events.emit('progress',{data:JSON.stringify({done:0,total:683})});
+ h.events.emit('set',{data:JSON.stringify({songs:[],categories:[],sceneToSong:{}})});
+ a.equal(h.get('.connection-label').hidden,true);
+ h.events.emit('progress',{data:JSON.stringify({done:683,total:683})});
+ a.equal(h.get('.connection-label').textContent,'No songs found. Name a scene "* Song title".');a.equal(h.get('.connection-label').hidden,false);
+ h.events.emit('error');a.equal(h.get('.connection-label').textContent,'Reconnecting…');
+ h.events.emit('open');a.equal(h.get('.connection-label').textContent,'Waiting for Live set…');
+});
+test('cancelled timing confirmation makes no POST and admin controls stay hidden for phones',async()=>{
+ const h=shellHarness({local:true});h.ctx.confirm=()=>false;
+ await h.get('.timing-build').onclick();a.equal(h.posts.length,0);
+ const phone=shellHarness();phone.location.hash='#admin';phone.hooks.shell();a.equal(phone.get('.timing-panel').hidden,true);
 });

@@ -12,6 +12,9 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   const configWarning = config.configWarning;
   let cfg = normalizeAccess(config), parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
+  let building = false, timing = null;
+  function onTimingProgress(value) { if (building && value && Number.isInteger(value.done) && Number.isInteger(value.total) && value.done >= 0 && value.total >= value.done) { timing = {...value,running:true}; broadcast("timing",timing); } }
+  bridge.on("timingProgress",onTimingProgress);
   let adding = false, rejectPlayer = null;
   function playerRemoved() { if (rejectPlayer) rejectPlayer(Error('Device removed')); }
   bridge.on('playerRemoved',playerRemoved);
@@ -177,6 +180,21 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         if (!checkAdminPassword((value || {}).password,cfg)) return reply(res,403,'Incorrect admin password');
         cookie(adminToken(cfg)); return reply(res,204);
       }
+      if (route === '/api/timing-clips' && req.method === 'POST') {
+        if (identity.kind !== 'admin') return reply(res,403,'Admin required');
+        let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+        if (building || changing || indexing && indexing.done < indexing.total || setJSON === null) return reply(res,409,'Indexing or another set change is in progress');
+        if ((!transport || transport.is_playing) && (!value || value.confirmPlaying !== true)) return reply(res,409,'Live is playing. Confirm building timing clips while playing.');
+        building = true; changing = true; timing = {running:true,done:0,total:rawScenes.size}; broadcast('timing',timing);
+        try {
+          const result = await bridge.buildTiming(value || {});
+          timing = {...result,running:false}; broadcast('timing',timing);
+          return result.ok ? json(res,result) : reply(res,409,JSON.stringify(result),'application/json');
+        } catch (e) {
+          timing = {running:false,ok:false,message:e.message}; broadcast('timing',timing);
+          return reply(res,409,e.message);
+        } finally { building = false; changing = false; }
+      }
       if (route === '/api/player-outputs' || route === '/api/players') {
         if (identity.kind !== 'admin') return reply(res,403,'Admin required');
         if (route === '/api/player-outputs' && req.method === 'GET') {
@@ -257,6 +275,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         if (transport) send(res, 'transport', transport);
         send(res, 'play', play); if (pos) send(res, 'pos', pos);
         if (indexing) send(res, 'progress', indexing);
+        if (timing) send(res,'timing',timing);
         res.on('close', () => clients.delete(res)); return;
       }
       if (route === '/api/transport' && req.method === 'POST') {
@@ -344,6 +363,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
       playerRemoved(); bridge.removeListener('playerRemoved',playerRemoved);
       bridge.removeListener('effectLevel',onEffectLevel);
       bridge.removeListener('transport', onTransport);
+      bridge.removeListener('timingProgress', onTimingProgress);
       bridge.removeListener('progress', onProgress);
       bridge.removeListener('mix', onMix); bridge.removeListener('level', onLevel);
       for (const entry of [...sends.values(), ...levelUpdates.values()]) clearTimeout(entry.timer);

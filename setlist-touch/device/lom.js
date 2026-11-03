@@ -9,7 +9,7 @@ var positionObserver = null, timingPath = null, timingCount = 0;
 var rows = [], overrides = [], playing = -1, fired = -1;
 var positionKey = '', rowsJSON = null, active = false, subscribing = false;
 var scan = null, generation = 0, dirtyScenes = {}, dirtyTiming = {}, sweepIndex = 0;
-var playbackPending = false, sceneIds = '', priorityTiming = {};
+var playbackPending = false, sceneIds = '', trackIds = '', priorityTiming = {};
 var retryDelay = 1000, retryPending = false, lastProgress = null;
 var songBeats = 4, signatureDirty = false, progressElapsed = 0;
 
@@ -76,6 +76,7 @@ function ready() {
     playbackChanged();
 }
 function refresh() {
+    stopBuild("Device refreshed");
     // Explicit refresh restarts indexing; Node ready only replays cached state.
     // Cancel immediately, but drain the many scene observers in bounded work ticks.
     if (work) work.cancel(); if (sweep) sweep.cancel(); if (retry) retry.cancel();
@@ -130,6 +131,7 @@ function publish() {
 function rebuild() {
     if (!active || subscribing) return;
     // Retire old generations in bounded batches; their callbacks are inert immediately.
+    stopBuild("Set structure changed; build stopped");
     generation++; work.cancel();
     retired = retired.concat(sceneObservers); sceneObservers = [];
     dirtyScenes = {}; dirtyTiming = {}; priorityTiming = {}; signatureDirty = false;
@@ -142,7 +144,14 @@ function rebuild() {
 function bindTiming() {
     var count = root.getcount('tracks');
     releaseAll(trackObservers); release(positionObserver); positionObserver = null; positionKey = '';
-    timingPath = count ? 'live_set tracks ' + (count - 1) : null;
+    var parent = null, index = -1, ids = root.get('tracks');
+    trackIds = String(ids);
+    try {
+        parent = new LiveAPI('this_device canonical_parent');
+        for (var i = 0; i < ids.length; i += 2) if (Number(ids[i + 1]) === Number(parent.id)) index = i / 2;
+    } catch (e) {} finally { release(parent); }
+    if (index < 0) post('Setlist Touch: device is not on a regular track; timing falls back to last regular track\n');
+    timingPath = count ? 'live_set tracks ' + (index < 0 ? count - 1 : index) : null;
     if (timingPath) {
         watch(timingPath, 'playing_slot_index', playbackChanged, trackObservers);
         watch(timingPath, 'fired_slot_index', playbackChanged, trackObservers);
@@ -150,6 +159,7 @@ function bindTiming() {
 }
 function tracksChanged() {
     if (!active || subscribing || retryPending) return;
+    stopBuild('Set structure changed; build stopped');
     if (String(root.get('scenes')) !== sceneIds) { rebuild(); return; }
     bindTiming();
     var target = scan ? scan.rows : rows;
@@ -170,6 +180,7 @@ function hasEntries(map) { for (var key in map) if (map.hasOwnProperty(key)) ret
 function workTick() {
     if (!active || retryPending) return;
     try {
+        if (build) { buildTick(); return; }
         // At most 30 releases (60 property/id writes), with no scene reads this tick.
         if (retired.length) {
             for (var r = 0; r < CHUNK * 10 && retired.length; r++) release(retired.pop());
@@ -217,7 +228,7 @@ function workTick() {
 }
 function sweepTick() {
     if (!active) return;
-    if (!retryPending && !scan && rows.length) {
+    if (!retryPending && !scan && !build && rows.length) {
         for (var i = 0; i < CHUNK; i++) {
             dirtyTiming[sweepIndex] = true; sweepIndex = (sweepIndex + 1) % rows.length;
         }
@@ -283,6 +294,7 @@ function fire(index, expectedName) {
     finally { release(scene); }
 }
 function notifydeleted() {
+    stopBuild("Device removed");
     active = false; generation++;
     if (work) work.cancel(); if (sweep) sweep.cancel(); if (retry) retry.cancel();
     // Max destroys the js-owned LiveAPI objects. Guards above make callbacks inert;
@@ -293,3 +305,97 @@ function notifydeleted() {
     dirtyScenes = {}; dirtyTiming = {}; priorityTiming = {}; sweepIndex = 0; playbackPending = false;
     retryPending = false; lastProgress = null; sceneIds = '';
 }
+
+// The builder shares work with indexing: six source tracks OR one commit per tick.
+// No automatic retries after a mutation: a failed build reports its partial counts.
+var build = null, buildReplies = {};
+function timingCancel(id) { if (build && build.id === id) { stopBuild('Build cancelled after reply timeout'); requestWork(); } }
+function timingForget(id) { delete buildReplies[id]; }
+function timingReport(id, result) {
+    var dict = new Dict('setlist_touch_timing_' + id);
+    buildReplies[id] = dict; dict.set('result', JSON.stringify(result));
+    outlet(0, 'timingResult', id);
+}
+function buildProgress() {
+    outlet(0, 'timingProgress', build.row, build.total);
+}
+function stopBuild(message) {
+    if (!build) return;
+    var b = build; build = null;
+    if (b.undo) try { root.call('end_undo_step'); } catch (e) { post('Setlist Touch: timing clip undo end unavailable\n'); }
+    timingReport(b.id, {ok:!message, message:message || '', created:b.created,
+        existing:b.existing, noSource:b.noSource, done:b.row, total:b.total});
+}
+function timingBuild(id, confirmPlaying) {
+    if (build || scan || retryPending || !active || !timingPath) {
+        timingReport(id, {ok:false, message:'Indexing or another build is in progress; wait until Live is ready'}); return;
+    }
+    try {
+        if (Number(scalar(root, 'is_playing')) !== 0 && Number(confirmPlaying) !== 1) {
+            timingReport(id, {ok:false, message:'Live is playing. Confirm building while playing.'}); return;
+        }
+        if (String(root.get('scenes')) !== sceneIds || String(root.get('tracks')) !== trackIds) {
+            timingReport(id, {ok:false, message:'Set structure changed; wait for indexing'}); return;
+        }
+        var track = new LiveAPI(timingPath), midi;
+        try { midi = Number(scalar(track, 'has_midi_input')) === 1; } finally { release(track); }
+        if (!midi) { timingReport(id, {ok:false, message:'Timing track must be a MIDI track'}); return; }
+        build = {id:id, row:0, total:timingCount, tracks:root.getcount('tracks'), track:0,
+            scenes:String(root.get('scenes')), ids:String(root.get('tracks')), path:timingPath,
+            longest:0, phase:'start', created:0, existing:0, noSource:0, elapsed:0, undo:false};
+        try { root.call('begin_undo_step'); build.undo = true; }
+        catch (e) { post('Setlist Touch: timing clip undo grouping unavailable\n'); }
+        buildProgress(); requestWork();
+    } catch (e) { if (build) stopBuild(String(e)); else timingReport(id, {ok:false,message:String(e)}); }
+}
+function buildTick() {
+    var b = build, slot = null, clip = null;
+    try {
+        if (String(root.get('scenes')) !== b.scenes || String(root.get('tracks')) !== b.ids) {
+            stopBuild('Set structure changed; build stopped'); requestWork(); return;
+        }
+        if (b.row === b.total) { stopBuild(''); requestWork(); return; }
+        var path = b.path + ' clip_slots ' + b.row;
+        if (b.phase === 'start') {
+            slot = new LiveAPI(path);
+            if (Number(scalar(slot, 'has_clip')) === 1) { b.existing++; finishBuildRow(); }
+            else { b.phase = 'sources'; b.track = 0; b.longest = 0; }
+        } else if (b.phase === 'sources') {
+            for (var n = 0; n < 6 && b.track < b.tracks; n++, b.track++) {
+                var source = 'live_set tracks ' + b.track;
+                if (source === b.path) continue;
+                slot = new LiveAPI(source + ' clip_slots ' + b.row);
+                if (Number(scalar(slot, 'has_clip')) === 1) {
+                    clip = new LiveAPI(source + ' clip_slots ' + b.row + ' clip');
+                    if (beatTiming(clip)) {
+                        var length = Number(scalar(clip, 'loop_end')) - Number(scalar(clip, 'loop_start'));
+                        if (isFinite(length) && length > b.longest) b.longest = length;
+                    }
+                    release(clip); clip = null;
+                }
+                release(slot); slot = null;
+            }
+            if (b.track === b.tracks) b.phase = 'create';
+        } else {
+            // Fresh slot and has_clip read immediately before the only create call.
+            slot = new LiveAPI(path);
+            if (Number(scalar(slot, 'has_clip')) === 1) b.existing++;
+            else if (!(b.longest > 0)) b.noSource++;
+            else {
+                slot.call('create_clip', b.longest);
+                if (Number(scalar(slot, 'has_clip')) !== 1) throw Error('Live did not confirm clip creation; check the slot in Live');
+                b.created++; // Count creation even if the subsequent name set fails.
+                clip = new LiveAPI(path + ' clip');
+                clip.set('name', '⏱ ' + (b.longest / rows[b.row].beatsPerBar) + ' bars');
+                if (text(clip, 'name') !== '⏱ ' + (b.longest / rows[b.row].beatsPerBar) + ' bars') throw Error('Live did not confirm clip name');
+                dirtyTiming[b.row] = true;
+            }
+            finishBuildRow();
+        }
+        b.elapsed += SLICE_MS;
+        if (b.elapsed >= PROGRESS_MS) { buildProgress(); b.elapsed = 0; }
+        requestWork();
+    } catch (e) { stopBuild('Build stopped: ' + e); requestWork(); }
+    finally { release(slot); release(clip); }
+}
+function finishBuildRow() { build.row++; build.phase = 'start'; }

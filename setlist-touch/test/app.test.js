@@ -458,3 +458,31 @@ test('server refuses A Gtr reroute even with a genuine observed E Gtr route',asy
  const expectedRouting={index:1,name:ret.name,typeId:'ext',channelId:'3/4'};
  a.equal((await req(port,'/api/players',{...playerBody,sendName:'A Gtr',reroute:true,expectedRouting})).status,409);a.equal(calls,0);
 });
+
+test('timing builder requires admin including open phones, and checks Origin',async t=>{
+ const {port,bridge}=await setup(t,'192.168.1.20');let calls=0;bridge.buildTiming=async()=>{calls++;return {ok:true};};
+ const auth={Authorization:'Basic '+Buffer.from('band:pw').toString('base64')};
+ a.equal((await req(port,'/api/timing-clips',{confirmPlaying:true},auth)).status,403);
+ const local=await setup(t);local.bridge.buildTiming=bridge.buildTiming;
+ a.equal((await req(local.port,'/api/timing-clips',{confirmPlaying:true},{Origin:'http://evil.example'})).status,403);a.equal(calls,0);
+});
+test('timing build rejects indexing, concurrent requests and unconfirmed playback; streams progress and result',async t=>{
+ const {port,bridge}=await setup(t);let finish,calls=0;
+ bridge.buildTiming=()=>{calls++;return new Promise(resolve=>finish=resolve);};
+ a.equal((await req(port,'/api/timing-clips',{})).status,409);
+ bridge.emit('progress',{done:0,total:683});a.equal((await req(port,'/api/timing-clips',{confirmPlaying:true})).status,409);
+ bridge.emit('progress',{done:683,total:683});
+ const pending=req(port,'/api/timing-clips',{confirmPlaying:true});
+ while(!finish)await new Promise(resolve=>setImmediate(resolve));
+ a.equal((await req(port,'/api/timing-clips',{confirmPlaying:true})).status,409);a.equal(calls,1);
+ bridge.emit('timingProgress',{done:12,total:683});
+ const s=stream(port);await s.ready;await req(port,'/');a.match(s.events.find(e=>e.startsWith('event: timing')),/"running":true/);s.request.destroy();
+ finish({ok:true,created:2,existing:5,noSource:3,done:10,total:10});a.equal((await pending).status,200);
+ const late=stream(port);await late.ready;await req(port,'/');a.match(late.events.find(e=>e.startsWith('event: timing')),/"created":2/);late.request.destroy();
+});
+test('timing route permits stopped Live without playback confirmation and reports failure',async t=>{
+ const {port,bridge}=await setup(t);bridge.emit('transport',{is_playing:0,record_mode:0,tempo:120,current_song_time:0,signature_numerator:4,signature_denominator:4});
+ bridge.buildTiming=async()=>({ok:false,message:'Device removed',created:2,existing:0,noSource:0});
+ const result=await req(port,'/api/timing-clips',{});a.equal(result.status,409);a.match(result.data,/Device removed/);
+ bridge.buildTiming=async()=>{throw Error('Live stopped replying');};a.match((await req(port,'/api/timing-clips',{})).data,/stopped replying/);
+});

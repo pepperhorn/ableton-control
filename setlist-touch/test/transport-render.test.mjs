@@ -1,3 +1,4 @@
+import {noSongsMessage} from '../device/web/js/timing-view.js';
 import {test} from 'node:test';
 import a from 'node:assert/strict';
 import fs from 'node:fs';
@@ -99,7 +100,7 @@ test('empty-set app enables transport from its connection and own snapshot, inde
   })();
   const app = fs.readFileSync(new URL('../device/web/js/app.js', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '');
   vm.runInNewContext(app, {
-    document, window, location:{hostname:'localhost', search:'?transport=1', hash:''},
+    noSongsMessage, document, window, location:{hostname:'localhost', search:'?transport=1', hash:''},
     localStorage:{getItem:() => null, setItem() {}}, URLSearchParams, EventSource,
     ResizeObserver:class { observe() {} }, setTimeout, clearTimeout, fetch:globalThis.fetch,
     createTransportRenderer, createTapDetector:() => ({down() {}, move() {}, up() { return null; }, cancel() {}}),

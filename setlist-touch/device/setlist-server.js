@@ -29,6 +29,35 @@ max.addHandler('playerResult', async id => {
   finally { max.outlet('players','forget',id); }
 });
 max.addHandler('playerRemoved', () => { for (const entry of playerRequests.values()) { clearTimeout(entry.timer); entry.reject(Error('Device removed')); } playerRequests.clear(); bridge.emit('playerRemoved'); });
+let timingSerial = 0, timingPending = null;
+bridge.buildTiming = value => {
+  if (timingPending) return Promise.resolve({ok:false,message:'Another build is in progress'});
+  return new Promise((resolve,reject) => {
+    const id = ++timingSerial;
+    const expire = () => { timingPending = null; max.outlet('timing','timingCancel',id); reject(Error('Live stopped replying. Check timing clips in Live before retrying.')); };
+    timingPending = {id,resolve,reject,expire,timer:setTimeout(expire,10000)};
+    max.outlet('timing','timingBuild',id,value.confirmPlaying === true ? 1 : 0);
+  });
+};
+max.addHandler('timingProgress', (done,total) => {
+  if (!timingPending) return;
+  clearTimeout(timingPending.timer); timingPending.timer = setTimeout(timingPending.expire,10000);
+  bridge.emit('timingProgress',{done,total});
+  max.outlet('address', 'Building timing clips ' + done + ' / ' + total);
+});
+max.addHandler('timingResult', async id => {
+  const entry = timingPending;
+  try {
+    if (!entry || entry.id !== id) return;
+    const dict = await max.getDict('setlist_touch_timing_' + id);
+    entry.resolve(JSON.parse(dict.result));
+  } catch (_) { if (entry) entry.reject(Error('Unreadable Live reply; check timing clips in Live')); }
+  finally {
+    max.outlet('timing','timingForget',id);
+    if (entry && entry.id === id) { clearTimeout(entry.timer); if (timingPending === entry) timingPending = null; }
+    if (lastAddress && !indexing) max.outlet('address',lastAddress);
+  }
+});
 bridge.setEffectSend = (effectIndex, returnIndex, value) => {
   const effect = (lastMix.effects || []).find(e => e.index === effectIndex), ret = lastMix.returns.find(r => r.index === returnIndex);
   if (effect && ret) max.outlet('effectSend',effectIndex,returnIndex,value,effect.name,ret.name);

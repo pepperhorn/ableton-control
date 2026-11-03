@@ -55,6 +55,15 @@ function createFakeBridge(rawScenes, rawMix = {returns:[], tracks:[]}, {slowInde
     const label = value === 0 ? '-inf dB' : (20*Math.log10(value)).toFixed(1) + ' dB';
     effect.sends[returnIndex] = {value,label}; bridge.emit('effectLevel',{effectIndex,returnIndex,value,label});
   };
+  bridge.buildTiming = async () => {
+    let done = 0, created = 0, existing = 0, noSource = 0;
+    for (const row of rawScenes) {
+      await new Promise(resolve => setTimeout(resolve,80));
+      if (row.loopBeats > 0) existing++; else noSource++;
+      bridge.emit('timingProgress',{done:++done,total:rawScenes.length});
+    }
+    return {ok:true,created,existing,noSource,done,total:done};
+  };
   bridge.snapshot = () => {
     emitTransport(); bridge.emit('mix', rawMix);
     if (indexDone) { bridge.emit('scenes', rawScenes); emitPlay(); emitPos(); return; }

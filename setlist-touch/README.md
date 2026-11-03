@@ -151,3 +151,11 @@ Open Admin on the laptop (or sign in as admin on a phone). In Add player and mix
 While playing, press Confirm Add while playing after the warning. If Live cannot confirm routing, no member is added; any created return stays. Set its output in Live, refresh outputs and Add again. If no external return supplies channels, the form checks Main’s external output channels without changing the set, including in sets with only effect returns. If Live still provides no channels, route one return to Ext. Out in Live and refresh outputs; Add never creates a new return without an explicit channel.
 
 Effects routed to Main appear after track faders in each player mix. They control only the effect return’s send to that player. A return send disabled in Live can move in the app but has no audible effect until you enable that send in Live. Removing a member leaves the return in the set.
+
+### Timing clips
+
+Timing comes from the device's own regular track, even when it is moved. On a return or Main, the device logs a fallback to the last regular track. Put it on its own MIDI track to build timing clips.
+
+In Settings or Admin, choose **Build timing clips**, confirm, and confirm again if Live is playing. The builder fills only empty slots, using the longest loop in each row across the other tracks. MIDI and warped audio count; unwarped audio does not. Existing clips are never changed. Delete a timing clip in Live and build again to regenerate it. Rows with no usable source are skipped. Counts appear only from actual timing-track clips. Scene follow actions launch the corresponding timing clip; clip follow actions are not copied.
+
+The build pauses indexing work and reports progress and created/skipped totals. A structure change or device removal stops it; clips already created remain. The device attempts one undo group using `begin_undo_step` / `end_undo_step`. If that API is unavailable, undo is not grouped (reported in the Max console); use Live's individual undo steps. Undo grouping, scene follow actions and performance on a real large set require a Live check.
