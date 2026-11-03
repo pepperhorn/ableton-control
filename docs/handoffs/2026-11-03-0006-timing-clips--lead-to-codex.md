@@ -46,5 +46,7 @@ None.
 ---
 ## Receiver ack
 
+Acknowledged: bind timing to the device track with logged fallback; implement a budgeted, admin-confirmed empty-slot timing-clip builder, progress/results and the received-empty-set message. I own only the plan-listed paths under setlist-touch/ and these 0006 handoffs (root device/ is excluded). I will test every review focus, run the deterministic build and browser checks, then commit the return and open a draft PR. No questions. GBrain searched for m4l-control timing clips; no relevant project pages returned.
+
 ---
 ## Return (implementer → lead; fill in when done, or in a separate …-to-lead.md)
