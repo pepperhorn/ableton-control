@@ -9,6 +9,7 @@ Next ID: 0015
 
 | K | Title | Status | Owner (provider/model) | Branch | PR | Worktree | T3 task/thread | Spec | Plan | Latest handoff | Updated |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| 0014 | Click device address to copy it | https://github.com/pepperhorn/ableton-control/pull/11 | 2026-11-04 (squash of reviewed bca8537) | Opus approved r1; 307 tests on main. Nits: test that the address box only takes prepend set; no feedback if URL changes mid-copy. Verify on Windows: click copies, confirmation reverts. |
 | 0013 | Port already in use + Open button | https://github.com/pepperhorn/ableton-control/pull/10 | 2026-11-04 (28fe431, squash of reviewed 4abd57a) | Opus approved r3; 298 tests on main. Follow-ups: slow ::1 refusal adds ~1 s per start/settings change on Windows; overloaded [::1] listener could read as absent; startup note shows raw errno text. Verify on Windows: normal start on configured port (~1 s), busy port falls forward with panel note, Open shows and fronts the window, firewall prompt. |
 | 0009 | Band members and access | https://github.com/pepperhorn/ableton-control/pull/7 | 2026-10-31 (squash of reviewed da181fd) | Opus approved r3. Follow-ups → 0010. Verify: jweb stays full admin on Windows, real phones keep their name after a browser restart, Node 16 runtime. |
 | 0008 | Monitor tab | https://github.com/pepperhorn/ableton-control/pull/6 | 2026-10-31 (squash of reviewed f24c47e + docs-only main merge fddc1c9) | Opus approved r2. Verify in Live: phone on mic stand, flash vs real queued scene incl. pale colours, blank name time during re-index, possible brief wrong-name flash on scene insert. |
@@ -17,7 +18,6 @@ Next ID: 0015
 | 0003 | Transport header | https://github.com/pepperhorn/ableton-control/pull/3 | 2026-10-29 (squash of reviewed bfd084a) | Opus approved r2. Optional: extra lost-pointer safeguard (transport-render.js:66). Verify in Live: get_current_beats_song_time format, play/stop idempotence, Arrangement Record toggle. |
 | 0002 | In-ear mix pages (phase 2) | https://github.com/pepperhorn/ableton-control/pull/2 | 2026-10-29 (22b634a, squash of reviewed cd24b83) | Opus approved r2. Optional nits: late mid-drag echo or cancel() clears release hold early. Needs user verification in Live 12/Windows: routing JSON and Main/Master name, echo latency vs 1 s hold, send labels, touch. |
 | 0001 | Setlist Touch (phase 1) | https://github.com/pepperhorn/ableton-control/pull/1 | 2026-10-29 (e2bc976, squash of reviewed a3f2853) | Opus approved r2. Minor follow-ups folded into 0002: Space blocked in settings inputs; extra LiveAPI reads per position update; empty set shows Reconnecting. Needs user verification in Live on Windows (touch in jweb, END-row empty name, window open/resize). |
-| 0014 | Click device address to copy it to clipboard | in-review | codex/gpt-6.1-sol | orch/0014-copy-address | https://github.com/pepperhorn/ableton-control/pull/11 | T3 | — | docs/specs/0014-copy-address.md | (spec) | docs/handoffs/2026-11-04-0014-copy-address--lead-to-codex.md | 2026-11-04 |
 | 0012 | Review follow-ups: 0011 (stale form can link an alias without naming it first; case-only name difference creates a near-duplicate return); 0006 (Build before track found shows wrong message, lom.js:347; build tick reads track list twice, lom.js:372) | proposed | — | — | — | — | — | — | — | — | 2026-11-02 |
 | 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
 
@@ -30,6 +30,7 @@ Next ID: 0015
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-11-04 0014 in-review→merged — PR #11; 307 tests on main; GBrain: pending write-back
 2026-11-04 0014 dispatched→in-review — PR #11 head bca8537, 307 tests; Opus review r1
 2026-11-04 0014 →dispatched — user: clicking the http link should copy it; Sol in worktree
 2026-11-04 0013 in-review→merged — PR #10 28fe431; 298 tests on main; r3 follow-ups noted; GBrain: pending write-back
