@@ -317,6 +317,32 @@
    },
    {
     "box": {
+     "id": "copy-trigger",
+     "maxclass": "newobj",
+     "patching_rect": [
+      500,
+      160,
+      220,
+      22
+     ],
+     "text": "t b"
+    }
+   },
+   {
+    "box": {
+     "id": "copy-command",
+     "maxclass": "message",
+     "patching_rect": [
+      500,
+      200,
+      220,
+      22
+     ],
+     "text": "copyAddress"
+    }
+   },
+   {
+    "box": {
      "id": "index-status",
      "maxclass": "newobj",
      "patching_rect": [
@@ -682,6 +708,42 @@
      ],
      "destination": [
       "lom",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "address",
+      0
+     ],
+     "destination": [
+      "copy-trigger",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "copy-trigger",
+      0
+     ],
+     "destination": [
+      "copy-command",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "copy-command",
+      0
+     ],
+     "destination": [
+      "node",
       0
      ]
     }
