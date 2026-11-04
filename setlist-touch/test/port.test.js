@@ -33,8 +33,8 @@ test('startup bind failure falls forward and persists the working port to disk',
 });
 test('nonce check rejects another HTTP 200 server and times out a hanging one',async t=>{
  const other=await server(t);a.equal(await probeLoopback(other.address().port,'expected-nonce'),false);
- const sockets=new Set(),hang=await server(t,()=>{});hang.on('connection',s=>{sockets.add(s);s.on('close',()=>sockets.delete(s));});
- a.equal(await probeLoopback(hang.address().port,'expected-nonce'),false);for(const s of sockets)s.destroy();
+ let hangs=0;const sockets=new Set(),hang=await server(t,()=>hangs++);hang.on('connection',s=>{sockets.add(s);s.on('close',()=>sockets.delete(s));});
+ a.equal(await probeLoopback(hang.address().port,'expected-nonce'),false);a.equal(hangs,2);for(const s of sockets)s.destroy();
 });
 test('a bound but shadowed port is discarded before falling forward (injected OS probe)',async t=>{
  let first,checks=0;const saved=[];
@@ -87,4 +87,57 @@ test('unreadable config fallback never invokes persistence',async t=>{
  const cfg=loadConfig(dir);a.ok(cfg.configWarning);let writes=0;
  const busy=await server(t),app=appFor(t,{config:cfg,saveConfig:()=>writes++});
  await app.listenWithFallback(busy.address().port);a.equal(writes,0);a.ok(fs.statSync(dir).isDirectory());a.match(app.getPortNote(),/In memory only/);
+});
+
+test('IPv6-only shadow is rejected at startup and for an exact Settings change',async t=>{
+ const app=appFor(t),active=await app.listen(0);
+ const shadow=http.createServer((req,res)=>res.end('foreign IPv6 app'));
+ try {await new Promise((resolve,reject)=>{shadow.once('error',reject);shadow.listen({host:'::1',port:0,ipv6Only:true},resolve);});}
+ catch(error) {if(['EAFNOSUPPORT','EADDRNOTAVAIL','EPROTONOSUPPORT'].includes(error.code)){t.skip('IPv6 loopback unavailable');return;}throw error;}
+ t.after(()=>new Promise(r=>shadow.close(r)));const target=shadow.address().port;
+ const result=await request(active,{...config,port:target});a.equal(result.status,400);a.match(result.data,/is busy/);
+ a.equal((await request(active)).status,200);
+ const startup=appFor(t);const next=await startup.listenWithFallback(target);a.ok(next>target);a.match(startup.getPortNote(),/was busy/);
+});
+test('IPv6 refusal is allowed after the IPv4 nonce succeeds',async t=>{
+ const app=appFor(t);const port=await app.listen(0);
+ a.equal(await probeLoopback(port,'wrong-nonce'),false);
+ a.equal((await request(port)).status,200); // Settings accepts Host 127.0.0.1.
+});
+test('probe timeout retries once and succeeds; wrong replies never retry',async t=>{
+ const nonce='test-nonce';let calls=0;
+ const s=await server(t,(req,res)=>{calls++;if(calls>1)res.end(nonce);});
+ a.equal(await probeLoopback(s.address().port,nonce),true);a.equal(calls,2);
+ calls=0;s.removeAllListeners('request');s.on('request',(req,res)=>{calls++;res.end('wrong');});
+ a.equal(await probeLoopback(s.address().port,nonce),false);a.equal(calls,1);
+});
+function denyPort(t,port) {
+ const original=http.Server.prototype.listen;
+ t.mock.method(http.Server.prototype,'listen',function(...args){
+  if(args[0]===port) {process.nextTick(()=>{const error=Error('listen EACCES: permission denied 0.0.0.0:'+port);error.code='EACCES';this.emit('error',error);});return this;}
+  return original.apply(this,args);
+ });
+}
+test('non-busy bind error falls forward with its real reason, and Settings returns the reason',async t=>{
+ const reserved=await server(t),target=reserved.address().port;await new Promise(r=>reserved.close(r));denyPort(t,target);
+ const saved=[],app=appFor(t,{saveConfig:cfg=>saved.push(cfg)}),active=await app.listen(0);
+ const result=await request(active,{...config,port:target});a.equal(result.status,400);a.match(result.data,/EACCES: permission denied/);a.doesNotMatch(result.data,/busy/);a.equal(saved.length,0);
+ const startup=appFor(t);const port=await startup.listenWithFallback(target);a.ok(port>target);a.match(startup.getPortNote(),/EACCES: permission denied/);a.doesNotMatch(startup.getPortNote(),/was busy/);
+ const cfg=JSON.parse((await request(port)).data);a.equal(cfg.portNote,startup.getPortNote());
+});
+test('terminal startup bind error retains its actual reason instead of busy wording',async t=>{
+ denyPort(t,65535);const app=appFor(t);
+ await a.rejects(app.listenWithFallback(65535),error=>/EACCES: permission denied/.test(error.message)&&!error.message.includes('are busy'));
+});
+
+test('unavailable IPv6 is allowed after a successful IPv4 probe',async t=>{
+ const original=http.get;let ipv6=0;
+ t.mock.method(http,'get',function(options,...args){
+  if(options.hostname==='::1') {
+   ipv6++;const req=new EventEmitter();req.destroy=()=>{};
+   process.nextTick(()=>{const error=Error('IPv6 unavailable');error.code='EAFNOSUPPORT';req.emit('error',error);});return req;
+  }
+  return original.call(this,options,...args);
+ });
+ const app=appFor(t);const port=await app.listen(0);a.equal(ipv6,1);a.equal((await request(port)).status,200);
 });

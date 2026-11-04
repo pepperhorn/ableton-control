@@ -147,6 +147,6 @@ test('startup fallback note and failure reach the panel; ready only follows succ
   const text=outlets.find(o=>o[0]==='address')[1];
   if(failed) {a.equal(text,error);a.ok(!outlets.some(o=>o[0]==='ready'));
    handlers.progress(1,100);await new Promise(r=>setImmediate(r));a.deepEqual(outlets.at(-1),['address',error]);}
-  else {a.ok(text.startsWith(note+'\n'));a.match(text,/:8766$/);a.ok(outlets.some(o=>o[0]==='ready'));a.deepEqual(outlets.find(o=>o[0]==='url'),['url','http://localhost:8766/']);}
+  else {a.ok(text.startsWith(note+'\n'));a.match(text,/:8766$/);a.ok(outlets.some(o=>o[0]==='ready'));a.deepEqual(outlets.find(o=>o[0]==='url'),['url','http://127.0.0.1:8766/']);}
  }
 });

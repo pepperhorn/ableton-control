@@ -7,10 +7,10 @@ A touch-first song/scene launcher for Ableton Live 12 Suite on Windows, served b
 1. Copy the **entire `setlist-touch/device` folder** to the laptop, keeping `lib/`, `web/`, fonts and scripts beside `SetlistTouch.amxd`. Do not copy only the `.amxd`; this is an unfrozen device with external files.
 2. Drop `SetlistTouch.amxd` on a MIDI track. Use **one instance per laptop** (one server and shared Max dictionary). MIDI passes through unchanged. Node for Max starts with the device; Max supplies `max-api`, so there is no npm install.
 3. The rack panel shows a LAN address. Click **Open** for the resizable 1200×800 jweb window. The window uses presentation mode; the embedded page resizes with it. Max manages saved window geometry when the set/device is saved; cross-session geometry retention still needs verification on Windows.
-4. In a laptop browser open `http://localhost:8765/#settings` and set a username/password before connecting other devices. The Settings page includes a **Touch diagnostic** link, which also works inside jweb.
+4. In a laptop browser open `http://127.0.0.1:8765/#settings` and set a username/password before connecting other devices. The Settings page includes a **Touch diagnostic** link, which also works inside jweb.
 5. On a phone connected to the same Tailscale network, open `http://<tailscale-name>:8765` and enter those credentials. LAN devices can use the address on the panel. Allow the chosen TCP port through Windows Firewall on the intended networks.
 
-The port defaults to 8765. Settings are stored in `%USERPROFILE%\Documents\SetlistTouch\config.json` (`~/Documents/SetlistTouch/config.json` elsewhere). A port change binds the new port before saving; an occupied port leaves the old server/config intact. Open browser clients must use the new port. The embedded window is given the new URL automatically. At startup, a busy port (including one shadowed by another loopback server) falls forward to the next free port, trying up to 20 ports without going above 65535. The panel and Settings show the change; use the displayed port for laptop and phone URLs. The working port is saved for the next restart. A damaged/unreadable config is preserved; if saving fails, the note says the port is in memory only. If all attempts fail, the panel tells you to close the other program or edit config.json and reload. Settings port changes never fall forward. Settings require a loopback connection with Host `localhost`, `127.0.0.1` or `[::1]`. The API never returns the saved password; leave the password field blank to keep it. To disable remote access again, set `password` to an empty string in config.json and reload the device.
+The port defaults to 8765. Settings are stored in `%USERPROFILE%\Documents\SetlistTouch\config.json` (`~/Documents/SetlistTouch/config.json` elsewhere). Startup also checks IPv6 loopback: a foreign reply on `[::1]` makes a port busy; refused or unavailable IPv6 is allowed. A probe timeout is retried once. Other listen errors fall forward too, with their real reason shown on the panel and in Settings. A port change binds the new port before saving; an occupied port leaves the old server/config intact. Open browser clients must use the new port. The embedded window is given the new URL automatically. At startup, a busy port (including one shadowed by another loopback server) falls forward to the next free port, trying up to 20 ports without going above 65535. The panel and Settings show the change; use the displayed port for laptop and phone URLs. The working port is saved for the next restart. A damaged/unreadable config is preserved; if saving fails, the note says the port is in memory only. If all attempts fail, the panel tells you to close the other program or edit config.json and reload. Settings port changes never fall forward. Settings require a loopback connection with Host `localhost`, `127.0.0.1` or `[::1]`. The API never returns the saved password; leave the password field blank to keep it. To disable remote access again, set `password` to an empty string in config.json and reload the device.
 
 Windows prompts only on first listen for a given `node.exe` path. If an allow/block rule already exists, there is no prompt. Check Windows Security → Firewall → **Allow an app through firewall** for Max’s `node.exe`. To find a port owner, run `netstat -ano | findstr :8765`, then `tasklist /fi "pid eq <PID>"`.
 
@@ -20,12 +20,12 @@ Connect phones directly to the device's port. A local reverse proxy (including `
 
 ### Windows touch verification and fallback
 
-Windows/jweb finger events have **not been verified** in this environment. Use Settings → Touch diagnostic inside the embedded window, or send `url http://localhost:8765/touch-test.html` to its jweb in the Max patch editor. A clean tap should highlight the target; a drag, long hold or two-finger gesture must not. Inspect pointer type and IDs. Record the result before relying on the device at a gig.
+Windows/jweb finger events have **not been verified** in this environment. Use Settings → Touch diagnostic inside the embedded window, or send `url http://127.0.0.1:8765/touch-test.html` to its jweb in the Max patch editor. A clean tap should highlight the target; a drag, long hold or two-finger gesture must not. Inspect pointer type and IDs. Record the result before relying on the device at a gig.
 
 If jweb touch is unreliable, use Edge as the main laptop surface:
 
 ```bat
-msedge --app=http://localhost:8765/ --start-fullscreen
+msedge --app=http://127.0.0.1:8765/ --start-fullscreen
 ```
 
 The embedded window remains available as a convenience. The browser and embedded surfaces share playback but browse independently. Save window changes in Live if you want Max to retain them.
@@ -53,7 +53,7 @@ Tags such as `[V4]`, `[N32]`, and `[S]` are only labels. This device never edits
 
 ## Transport
 
-Bookmark `http://localhost:8765/?transport=1` (or the phone's usual authenticated address with `?transport=1`) to show Live transport on both Scenes and My mix. Other screens keep their current layout. Play needs a clean tap; Stop and Arrangement Record need a 1-second hold, with a visible fill, in either recording direction. Releasing early, leaving the button, a second pointer anywhere, locking, losing the connection or leaving the window cancels an unfinished gesture. Keyboard clicks do not operate transport; Space stays inert outside settings inputs.
+Bookmark `http://127.0.0.1:8765/?transport=1` (or the phone's usual authenticated address with `?transport=1`) to show Live transport on both Scenes and My mix. Other screens keep their current layout. Play needs a clean tap; Stop and Arrangement Record need a 1-second hold, with a visible fill, in either recording direction. Releasing early, leaving the button, a second pointer anywhere, locking, losing the connection or leaving the window cancels an unfinished gesture. Keyboard clicks do not operate transport; Space stays inert outside settings inputs.
 
 The row shows Live's playing/Arrangement Record state, tempo and one-based `bar.beat` position from Live's own musical-position readout, including earlier signature changes. If that API call fails or returns an invalid position, it falls back to computing position from the current time and signature (six eighth-note beats per 6/8 bar); that fallback assumes one signature from the start. Updates are limited to 10 Hz. Buttons require a connection, an unlocked screen and a fresh transport snapshot, including when the setlist is empty. Play is disabled while playing and Stop while stopped; the deferred Live lane also re-reads playback state and logs redundant commands as no-ops, preventing duplicate requests from restarting or rewinding transport. Losing focus, hiding the page or receiving pointer cancellation clears all pending transport pointers so the next gesture works without reloading. Recording requests carry an explicit 0/1 target, so repeats cannot flip recording. This controls Arrangement Record, not Session record, and does not edit tempo or stop all clips. The development fixture simulates and logs these commands; actual Live transport and Windows touch remain user acceptance checks.
 
@@ -68,7 +68,7 @@ python3 device/build_device.py   # deterministic .maxpat and .amxd
 node device/dev.js               # fake set, bound to 0.0.0.0:8765
 # If 8765 is occupied (development override only):
 SETLIST_TOUCH_PORT=18765 node device/dev.js
-curl -N http://localhost:18765/api/events
+curl -N http://127.0.0.1:18765/api/events
 ```
 
 The fake set is a screenshot-derived approximation, not a read of the real Live set. It simulates `[N32] AA` at 100 BPM, logs launches and queues each launch for one bar. Real LiveAPI quantisation and follow actions are verified only in Live. The fixture has **11 RISE rows**: ten named sections (including `{EMPTY}`), plus the first trailing blank. All 11 fit at 1280×800 in the local browser check.

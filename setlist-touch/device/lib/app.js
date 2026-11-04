@@ -8,19 +8,28 @@ const {parseMix} = require('./parse-mix');
 const {parseTransport, validCommand} = require('./transport');
 const {authorize, isTrustedLoopback} = require('./auth');
 const {loadConfig, saveConfig: persist, validConfig} = require('./config');
-// Use an absolute deadline as well as a byte cap: a shadow server may hang or stream.
-function probeLoopback(port, nonce) {
+// Bound each attempt even when a shadow server hangs or streams forever.
+function probeAddress(port, nonce, hostname) {
   return new Promise(resolve => {
     let settled = false, data = '';
-    const finish = ok => { if (settled) return; settled = true; clearTimeout(timer); request.destroy(); resolve(ok); };
-    const request = http.get({hostname:'127.0.0.1', port, path:'/_setlist_probe/' + nonce, agent:false}, res => {
-      res.on('data', chunk => { data += chunk; if (data.length > 128) finish(false); });
-      res.on('end', () => finish(res.statusCode === 200 && data === nonce));
-      res.on('error', () => finish(false));
+    const finish = result => { if (settled) return; settled = true; clearTimeout(timer); request.destroy(); resolve(result); };
+    const request = http.get({hostname, port, path:'/_setlist_probe/' + nonce, agent:false}, res => {
+      res.on('data', chunk => { data += chunk; if (data.length > 128) finish('busy'); });
+      res.on('end', () => finish(res.statusCode === 200 && data === nonce ? 'ok' : 'busy'));
+      res.on('error', () => finish('busy'));
     });
-    const timer = setTimeout(() => finish(false), 1000);
-    request.on('error', () => finish(false));
+    const timer = setTimeout(() => finish('timeout'), 1000);
+    request.on('error', error => finish(['ECONNREFUSED','EAFNOSUPPORT','EADDRNOTAVAIL','ENETUNREACH','EHOSTUNREACH','EPROTONOSUPPORT'].includes(error.code) ? 'unavailable' : 'busy'));
   });
+}
+async function probeLoopback(port, nonce) {
+  for (const hostname of ['127.0.0.1', '::1']) {
+    let result = await probeAddress(port, nonce, hostname);
+    // A startup event-loop stall must get a second chance before moving phones.
+    if (result === 'timeout') result = await probeAddress(port, nonce, hostname);
+    if (result !== 'ok' && !(hostname === '::1' && result === 'unavailable')) return false;
+  }
+  return true;
 }
 function createApp({bridge, config = loadConfig(), saveConfig = persist,
   probe = probeLoopback, webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
@@ -349,7 +358,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
               // Existing keep-alive connections must not leave the old port serving.
               res.once('finish', () => { for (const socket of sockets) if (socket.server === previous) socket.end(); });
             }
-          } catch (error) { if (candidate) await discard(candidate); reply(res, 400, error.code === 'PORT_BUSY' ? 'Port ' + value.port + ' is busy. Choose another port.' : 'Could not save settings or bind port'); }
+          } catch (error) { if (candidate) await discard(candidate); reply(res, 400, error.code === 'PORT_BUSY' ? 'Port ' + value.port + ' is busy. Choose another port.' : error.listenError ? error.message : 'Could not save settings or bind port'); }
           finally { changing = false; }
           return;
         }
@@ -374,16 +383,21 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   async function start(port) {
     const server = http.createServer(handler); servers.add(server);
     server.on('connection', socket => { socket.server = server; sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
+    let bound = false;
     try {
       await new Promise((resolve, reject) => {
         server.once('error', reject);
         server.listen(port, '0.0.0.0', () => { server.removeListener('error', reject); resolve(); });
       });
-      if (!await probe(server.address().port, nonce)) throw Error('Loopback reaches another program');
+      bound = true;
+      if (!await probe(server.address().port, nonce)) {
+        const error = Error('Loopback reaches another program or did not respond'); error.code = 'PORT_BUSY'; throw error;
+      }
       if (closed) throw Error('App closed');
       return server;
     } catch (cause) {
       await discard(server);
+      if (cause.code !== 'EADDRINUSE' && cause.code !== 'PORT_BUSY') { if (!bound) cause.listenError = true; throw cause; }
       const error = Error('Port ' + port + ' is busy'); error.code = 'PORT_BUSY'; error.cause = cause; throw error;
     }
   }
@@ -391,13 +405,18 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     async listen(port) { if (closed) throw new Error('App closed'); active = await start(port); return active.address().port; },
     async listenWithFallback(port) {
       if (closed) throw Error('App closed');
-      const last = Math.min(65535, port + 19);
+      const last = Math.min(65535, port + 19), failures = [];
       for (let attempt = port; attempt <= last; attempt++) {
         try { active = await start(attempt); }
-        catch (error) { if (closed) throw Error('App closed'); if (error.code === 'PORT_BUSY') continue; throw error; }
+        catch (error) {
+          if (closed) throw Error('App closed');
+          failures.push({port:attempt, busy:error.code === 'PORT_BUSY', message:error.message}); continue;
+        }
         cfg = {...cfg, port:attempt};
         if (attempt !== port) {
-          portNote = 'Port ' + port + ' was busy — now on ' + attempt;
+          const reason = failures.every(f => f.busy) ? 'Port ' + port + ' was busy' :
+            failures.map(f => 'Port ' + f.port + (f.busy ? ' was busy' : ' failed: ' + f.message)).join('; ');
+          portNote = reason + ' — now on ' + attempt;
           if (configWarning) portNote += '. In memory only: damaged or unreadable config.json was not overwritten.';
           else {
             try { await saveConfig(cfg); }
@@ -406,6 +425,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         }
         return attempt;
       }
+      const reasons = failures.filter(f => !f.busy);
+      if (reasons.length) throw Error('Could not listen on ports ' + port + '–' + last + '. ' + reasons.map(f => 'Port ' + f.port + ': ' + f.message).join('; ') + '. Close the other program or set "port" in config.json, then reload the device.');
       throw Error('Ports ' + port + '–' + last + ' are busy. Close the other program or set "port" in config.json, then reload the device.');
     },
     getPortNote() { return portNote; },

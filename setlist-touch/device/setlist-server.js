@@ -109,9 +109,9 @@ function address(port) {
   const interfaces = Object.values(os.networkInterfaces()).flat();
   const ip = interfaces.find(i => (i.family === 'IPv4' || i.family === 4) && !i.internal);
   const note = app.getPortNote();
-  lastAddress = (note ? note + '\n' : '') + `http://${ip ? ip.address : 'localhost'}:${port}`;
+  lastAddress = (note ? note + '\n' : '') + `http://${ip ? ip.address : '127.0.0.1'}:${port}`;
   if (!indexing) max.outlet('address', lastAddress);
-  max.outlet('url', `http://localhost:${port}/`);
+  max.outlet('url', `http://127.0.0.1:${port}/`);
 }
 bridge.addressChanged = address;
 const app = createApp({bridge, config:loadConfig(), saveConfig});
