@@ -8,7 +8,7 @@
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-ff47b6b8
 - **Base commit:** b01210305b7d9d2e0d20d1000190c4a6c2663f9c (dispatch HEAD afff9f0)
 - **Port:** 5340 (no server started)
-- **PR:** pending URL; draft against main from the branch above
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/11 (draft against main)
 - **Status:** closed
 
 ## Goal
@@ -53,7 +53,7 @@ None.
 
 ## Return
 - **Outcome:** done
-- **Commits:** acknowledgement 0d01d65, implementation immediately after it, then this return.
+- **Commits:** acknowledgement 0d01d65, implementation 25ef372, then this return and its PR-link update.
 - **What changed:** click wiring, clipboard helper, readiness/status feedback, README line, nine focused regression tests and existing VM loader adjustments.
 - **Verification output:**
 ```text
