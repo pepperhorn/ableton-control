@@ -16,7 +16,7 @@ Next ID: 0014
 | 0003 | Transport header | https://github.com/pepperhorn/ableton-control/pull/3 | 2026-10-29 (squash of reviewed bfd084a) | Opus approved r2. Optional: extra lost-pointer safeguard (transport-render.js:66). Verify in Live: get_current_beats_song_time format, play/stop idempotence, Arrangement Record toggle. |
 | 0002 | In-ear mix pages (phase 2) | https://github.com/pepperhorn/ableton-control/pull/2 | 2026-10-29 (22b634a, squash of reviewed cd24b83) | Opus approved r2. Optional nits: late mid-drag echo or cancel() clears release hold early. Needs user verification in Live 12/Windows: routing JSON and Main/Master name, echo latency vs 1 s hold, send labels, touch. |
 | 0001 | Setlist Touch (phase 1) | https://github.com/pepperhorn/ableton-control/pull/1 | 2026-10-29 (e2bc976, squash of reviewed a3f2853) | Opus approved r2. Minor follow-ups folded into 0002: Space blocked in settings inputs; extra LiveAPI reads per position update; empty set shows Reconnecting. Needs user verification in Live on Windows (touch in jweb, END-row empty name, window open/resize). |
-| 0013 | Port already in use: fall forward to next free port, detect Windows shadowed bind, show on panel | in-review | codex/gpt-6.1-sol | orch/0013-port-in-use | https://github.com/pepperhorn/ableton-control/pull/10 | T3 | — | docs/specs/0013-port-in-use.md | (spec) | docs/handoffs/2026-11-04-0013-port-in-use--lead-to-codex.md | 2026-11-04 |
+| 0013 | Port already in use: fall forward to next free port, detect Windows shadowed bind, show on panel | changes-requested | codex/gpt-6.1-sol | orch/0013-port-in-use | https://github.com/pepperhorn/ableton-control/pull/10 | T3 | — | docs/specs/0013-port-in-use.md | (spec) | docs/handoffs/2026-11-04-0013-port-in-use--lead-to-codex.md | 2026-11-04 |
 | 0012 | Review follow-ups: 0011 (stale form can link an alias without naming it first; case-only name difference creates a near-duplicate return); 0006 (Build before track found shows wrong message, lom.js:347; build tick reads track list twice, lom.js:372) | proposed | — | — | — | — | — | — | — | — | 2026-11-02 |
 | 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
 
@@ -29,6 +29,7 @@ Next ID: 0014
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-11-04 0013 in-review→changes-requested — Opus r1 on e49f045: localhost can reach another program on [::1] (important); timeout persists fallback; non-busy errors reported as busy; resumed Sol (probe ::1 + window on 127.0.0.1)
 2026-11-04 0013 dispatched→in-review — PR #10 head e49f045, 288 tests; scope incl. Open button; Opus review r1
 2026-11-04 0013 →dispatched — user test on larger set: port already taken, no firewall prompt; user chose next free port; Sol in worktree
 2026-11-03 0006 in-review→merged — PR #9 9996ba7; 276 tests on main; r2 nits → 0012; GBrain: pending write-back
