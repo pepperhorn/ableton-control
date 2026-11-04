@@ -58,6 +58,8 @@ None.
 ---
 ## Receiver ack
 
+Codex: I will implement bounded next-port startup with a nonce-backed loopback check, persist safe fallback ports, show fallback/failure on the panel and Settings, and refuse busy exact-port settings changes. I own only the declared files and my handoffs; no ledger or GBrain writes. Tests and deterministic device builds will be recorded; Windows/Live checks remain explicit. No open questions. GBrain search returned no relevant project/port guidance.
+
 ---
 ## Return
 (write in …--codex-to-lead.md)
