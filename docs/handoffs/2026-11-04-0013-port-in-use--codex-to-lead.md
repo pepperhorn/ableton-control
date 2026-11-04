@@ -6,7 +6,7 @@
 - **Dispatch:** [lead-to-codex](2026-11-04-0013-port-in-use--lead-to-codex.md)
 - **Branch:** orch/0013-port-in-use
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-eede20bf
-- **PR:** draft PR opened after this document's initial commit; URL recorded below before final return
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/10 (draft)
 - **Base commit:** aec16e0 (dispatch), ancestor 0cdf6087c6ce3d253868657206caf304f9065260
 - **Scope extension:** read `origin/main:docs/specs/0013-port-in-use.md` at 6c63f86749cee61369dfff1df32b1bd23a498093 after fetching; the added Open requirements are included without editing the spec.
 - **Port:** 5330 if running a preview; no preview server started
@@ -18,7 +18,7 @@ Startup now tries up to 20 sequential ports, capped at 65535, and verifies that 
 ## Scope and owned files
 Changed only `setlist-touch/device/lib/app.js`, `setlist-server.js`, `build_device.py`, generated `SetlistTouch.maxpat`/`.amxd`, `touch-window.js` (lead extension), Settings files `device/web/index.html` and `device/web/js/app.js`, `setlist-touch/README.md`, tests `port.test.js`, `device.test.js`, `mix.test.js`, and the two 0013 handoffs. Existing config loading/warning behavior was reused without a config.js edit.
 
-No ledger, GBrain, protected LOM/mix/player source, root device, or other docs edits. No merge, live writes, or firewall changes. Initial receiver ack was committed first as 1e43838.
+No ledger, GBrain, protected LOM/mix/player source, root device, or other docs edits. No merge, live writes, or firewall changes. Initial receiver ack was committed first as 1e43838; implementation and return handoff are committed as ae91410, followed by the PR-link documentation commit.
 
 ## Acceptance criteria and evidence
 - Bind failure falls forward; actual HTTP listener and disk readback verify persistence.
