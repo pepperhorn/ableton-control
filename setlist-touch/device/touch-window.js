@@ -9,7 +9,7 @@ function bang() {
     resizeTask.repeat();
 }
 function showwindow() {
-    this.patcher.wind.visible = 1;
+    this.patcher.front();
     lastSize = '';
     bang();
     fit();

@@ -1,4 +1,5 @@
 'use strict';
+const {randomBytes} = require('crypto');
 const http = require('http'), fs = require('fs'), path = require('path');
 const {matchReturn,adminToken, normalizeAccess, validMembers, sign, identify, can, meFor, newMember, checkAdminPassword} = require('./access');
 const {parseSet} = require('./parse-set');
@@ -7,9 +8,25 @@ const {parseMix} = require('./parse-mix');
 const {parseTransport, validCommand} = require('./transport');
 const {authorize, isTrustedLoopback} = require('./auth');
 const {loadConfig, saveConfig: persist, validConfig} = require('./config');
+// Use an absolute deadline as well as a byte cap: a shadow server may hang or stream.
+function probeLoopback(port, nonce) {
+  return new Promise(resolve => {
+    let settled = false, data = '';
+    const finish = ok => { if (settled) return; settled = true; clearTimeout(timer); request.destroy(); resolve(ok); };
+    const request = http.get({hostname:'127.0.0.1', port, path:'/_setlist_probe/' + nonce, agent:false}, res => {
+      res.on('data', chunk => { data += chunk; if (data.length > 128) finish(false); });
+      res.on('end', () => finish(res.statusCode === 200 && data === nonce));
+      res.on('error', () => finish(false));
+    });
+    const timer = setTimeout(() => finish(false), 1000);
+    request.on('error', () => finish(false));
+  });
+}
 function createApp({bridge, config = loadConfig(), saveConfig = persist,
-  webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
+  probe = probeLoopback, webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
   const configWarning = config.configWarning;
+  const nonce = randomBytes(24).toString('hex');
+  let portNote = '';
   let cfg = normalizeAccess(config), parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
   let building = false, timing = null;
@@ -144,7 +161,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     res.writeHead(status, {'Content-Type':type, 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'}); res.end(body);
   }
   function json(res, data) { reply(res, 200, JSON.stringify(data), 'application/json'); }
-  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password, ...(configWarning ? {configWarning} : {}), ...(cfg.accessEnabled || cfg.adminPassword || cfg.members.length ? {hasAdminPassword:!!cfg.adminPassword,accessEnabled:cfg.accessEnabled} : {})}; }
+  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password, ...(configWarning ? {configWarning} : {}), ...(portNote ? {portNote} : {}), ...(cfg.accessEnabled || cfg.adminPassword || cfg.members.length ? {hasAdminPassword:!!cfg.adminPassword,accessEnabled:cfg.accessEnabled} : {})}; }
   async function body(req) {
     if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) throw new Error('Expected JSON');
     let text = '';
@@ -153,6 +170,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   }
   async function handler(req, res) {
     try {
+      if (req.method === 'GET' && req.url === '/_setlist_probe/' + nonce &&
+          isTrustedLoopback(req.socket.remoteAddress, req.headers.host)) return reply(res, 200, nonce);
       const remoteAddress = remoteAddressOf(req);
       const access = authorize({remoteAddress, host:req.headers.host, authorization:req.headers.authorization}, cfg);
       if (access === 'challenge') { res.setHeader('WWW-Authenticate', 'Basic realm="Setlist Touch"'); return reply(res, 401, 'Authentication required'); }
@@ -322,7 +341,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
             await saveConfig(value);
             cfg = value; broadcast('access',null);
             const previous = active;
-            if (candidate) { active = candidate; if (typeof bridge.addressChanged === 'function') bridge.addressChanged(cfg.port); }
+            if (candidate) { portNote = ''; active = candidate; if (typeof bridge.addressChanged === 'function') bridge.addressChanged(cfg.port); }
             json(res, publicConfig());
             if (candidate && previous) {
               for (const client of clients) client.end();
@@ -330,7 +349,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
               // Existing keep-alive connections must not leave the old port serving.
               res.once('finish', () => { for (const socket of sockets) if (socket.server === previous) socket.end(); });
             }
-          } catch (_) { if (candidate) candidate.close(); reply(res, 400, 'Could not save settings or bind port'); }
+          } catch (error) { if (candidate) await discard(candidate); reply(res, 400, error.code === 'PORT_BUSY' ? 'Port ' + value.port + ' is busy. Choose another port.' : 'Could not save settings or bind port'); }
           finally { changing = false; }
           return;
         }
@@ -347,16 +366,49 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
       reply(res, 200, await fs.promises.readFile(actual), types[path.extname(actual)] || 'application/octet-stream');
     } catch (_) { if (!res.headersSent) reply(res, 500, 'Server error'); else res.destroy(); }
   }
-  function start(port) {
-    return new Promise((resolve, reject) => {
-      const server = http.createServer(handler); servers.add(server);
-      server.on('connection', socket => { socket.server = server; sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
-      server.once('error', reject);
-      server.listen(port, '0.0.0.0', () => { server.removeListener('error', reject); resolve(server); });
-    });
+  async function discard(server) {
+    servers.delete(server);
+    for (const socket of sockets) if (socket.server === server) socket.destroy();
+    await new Promise(resolve => server.close(() => resolve()));
+  }
+  async function start(port) {
+    const server = http.createServer(handler); servers.add(server);
+    server.on('connection', socket => { socket.server = server; sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
+    try {
+      await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(port, '0.0.0.0', () => { server.removeListener('error', reject); resolve(); });
+      });
+      if (!await probe(server.address().port, nonce)) throw Error('Loopback reaches another program');
+      if (closed) throw Error('App closed');
+      return server;
+    } catch (cause) {
+      await discard(server);
+      const error = Error('Port ' + port + ' is busy'); error.code = 'PORT_BUSY'; error.cause = cause; throw error;
+    }
   }
   return {
     async listen(port) { if (closed) throw new Error('App closed'); active = await start(port); return active.address().port; },
+    async listenWithFallback(port) {
+      if (closed) throw Error('App closed');
+      const last = Math.min(65535, port + 19);
+      for (let attempt = port; attempt <= last; attempt++) {
+        try { active = await start(attempt); }
+        catch (error) { if (closed) throw Error('App closed'); if (error.code === 'PORT_BUSY') continue; throw error; }
+        cfg = {...cfg, port:attempt};
+        if (attempt !== port) {
+          portNote = 'Port ' + port + ' was busy — now on ' + attempt;
+          if (configWarning) portNote += '. In memory only: damaged or unreadable config.json was not overwritten.';
+          else {
+            try { await saveConfig(cfg); }
+            catch (_) { portNote += '. In memory only: could not save config.json.'; }
+          }
+        }
+        return attempt;
+      }
+      throw Error('Ports ' + port + '–' + last + ' are busy. Close the other program or set "port" in config.json, then reload the device.');
+    },
+    getPortNote() { return portNote; },
     getConfig() { return {...cfg}; },
     async close() {
       if (closed) return; closed = true; clearInterval(ping); clearTimeout(posTimer); clearTimeout(transportTimer);
@@ -373,4 +425,4 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     }
   };
 }
-module.exports = {createApp};
+module.exports = {createApp, probeLoopback};

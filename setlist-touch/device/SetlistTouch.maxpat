@@ -344,7 +344,7 @@
       8,
       38,
       310,
-      22
+      110
      ]
     }
    },
@@ -383,7 +383,33 @@
       220,
       22
      ],
-     "text": "sel 1"
+     "text": "t b b"
+    }
+   },
+   {
+    "box": {
+     "id": "pcontrol-open",
+     "maxclass": "message",
+     "patching_rect": [
+      900,
+      120,
+      220,
+      22
+     ],
+     "text": "open"
+    }
+   },
+   {
+    "box": {
+     "id": "pcontrol",
+     "maxclass": "newobj",
+     "patching_rect": [
+      900,
+      160,
+      220,
+      22
+     ],
+     "text": "pcontrol"
     }
    },
    {
@@ -752,6 +778,42 @@
      ],
      "destination": [
       "select-open",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "select-open",
+      1
+     ],
+     "destination": [
+      "pcontrol-open",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "pcontrol-open",
+      0
+     ],
+     "destination": [
+      "pcontrol",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "pcontrol",
+      0
+     ],
+     "destination": [
+      "window",
       0
      ]
     }

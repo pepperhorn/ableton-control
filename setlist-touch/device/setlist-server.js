@@ -71,14 +71,14 @@ max.addHandler('transport', (is_playing, record_mode, tempo, current_song_time, 
 });
 bridge.fire = (index, name) => max.outlet('fire', index, name);
 let sceneRead = Promise.resolve();
-let lastAddress = '', indexing = false;
+let lastAddress = '', indexing = false, startupFailed = false;
 max.addHandler('progress', (done, total) => {
   if (!Number.isInteger(done) || !Number.isInteger(total) || done < 0 || total < done) return;
   // Completion follows the final Dict read, so clients keep the status until the set arrives.
   sceneRead.then(() => {
     indexing = done < total;
     bridge.emit('progress', {done, total});
-    if (indexing) max.outlet('progress', done, total);
+    if (indexing && !startupFailed) max.outlet('progress', done, total);
     else if (lastAddress) max.outlet('address', lastAddress);
   });
 });
@@ -108,15 +108,16 @@ max.addHandler('level', (trackIndex, returnIndex, value, ...label) => {
 function address(port) {
   const interfaces = Object.values(os.networkInterfaces()).flat();
   const ip = interfaces.find(i => (i.family === 'IPv4' || i.family === 4) && !i.internal);
-  lastAddress = `http://${ip ? ip.address : 'localhost'}:${port}`;
+  const note = app.getPortNote();
+  lastAddress = (note ? note + '\n' : '') + `http://${ip ? ip.address : 'localhost'}:${port}`;
   if (!indexing) max.outlet('address', lastAddress);
   max.outlet('url', `http://localhost:${port}/`);
 }
 bridge.addressChanged = address;
 const app = createApp({bridge, config:loadConfig(), saveConfig});
-app.listen(app.getConfig().port).then(port => {
+app.listenWithFallback(app.getConfig().port).then(port => {
   address(port);
   // Node startup can finish after live.thisdevice; request a fresh snapshot.
   max.outlet('ready');
-}).catch(error => {max.post('Setlist Touch: ' + error.message);});
+}).catch(error => {startupFailed = true; lastAddress = error.message; indexing = false; max.outlet('address', lastAddress); max.post('Setlist Touch: ' + error.message);});
 process.on('SIGTERM', () => app.close().then(() => process.exit(0)));

@@ -196,6 +196,7 @@ async function settings() {
   cancelGestures();$('.settings-panel').hidden=!show;$('.setlist-header').hidden=show;shell();accessUI.render();
   if(!show)return;
   try {const res=await fetch('/api/config');if(!res.ok)throw new Error();const cfg=await res.json();
+    const portNote=$('.settings-port-note');portNote.hidden=!cfg.portNote;portNote.textContent=cfg.portNote || '';
     const warning=$('.settings-config-warning');warning.hidden=!cfg.configWarning;
     warning.textContent=cfg.configWarning ? 'Damaged config.json detected at startup. Current settings may be missing members and passwords. ' +
       (cfg.configWarning.backupAvailable ? 'A recovery copy is kept in config.json.damaged. Repair the original file and restart Setlist Touch before saving, or restore missing settings from the copy.' : 'Could not create a recovery copy of the current file. Copy config.json somewhere safe, repair it and restart Setlist Touch before saving; saving replaces its damaged contents.') : '';
