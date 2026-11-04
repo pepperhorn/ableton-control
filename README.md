@@ -8,7 +8,7 @@ Max for Live tools for running a live band set from **Ableton Live 12 Session vi
 | --- | --- | --- |
 | [Setlist Touch](#setlist-touch) | Large touch screen for the current song's scenes, with a setlist sidebar and bar-accurate progress. Works in Live and in any browser, including a phone over Tailscale. | Built and reviewed; needs a check in Live on Windows |
 | [In-ear mix pages](#in-ear-mix-pages) | Setlist Touch pages where any player adjusts any player's in-ear mix from their phone | Built and reviewed; needs a check in Live on Windows |
-| [SceneNav](#scenenav) | Prev / Launch / Next scene buttons you can map to computer keys or a MIDI controller | Usable, not yet tested in Live |
+| [SceneNav](#scenenav) | Optional standalone Prev / Launch / Next scene buttons you can map to computer keys or a MIDI controller. Not needed for Setlist Touch; a stopgap until footswitch support (0004) is built in. | Usable, not yet tested in Live |
 
 Requires Ableton Live 12 Suite (Max for Live included). Setlist Touch targets a Windows touch laptop.
 
@@ -37,7 +37,7 @@ Everything is read from scene names. Nothing in your set is changed.
 
 Tags like `[V]`, `[N32]` and `[S]` are only labels. Your clip follow actions do the work.
 
-**Timing track:** the last regular track, just left of Main. In each section's row it holds a clip (MIDI or warped audio) whose loop length sets the section's bar count. It should carry the same follow actions as the music.
+**Timing track:** the MIDI track Setlist Touch sits on. In each section's row, a clip on that track sets the section's bar count from its loop length. Admins can press **Build timing clips** to fill empty slots with empty MIDI clips (named ⏱) sized to the longest loop in the row. Existing clips are never changed. Scene follow actions do the advancing, so the timing clips need none.
 
 Install, settings, networking and the touch check are covered in [`setlist-touch/README.md`](setlist-touch/README.md).
 
