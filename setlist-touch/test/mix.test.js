@@ -96,7 +96,7 @@ test('deferred commands retain expected names even after a newer snapshot rebuil
 test('Node for Max passes expected names intact and orders level events after the mix dict',async()=>{
  const handlers={},outlets=[],raw=require('../device/lib/fixture-mix.json');let bridge;
  const max={outlet:(...args)=>outlets.push(args),addHandler:(name,fn)=>handlers[name]=fn,getDict:async name=>{a.equal(name,'setlist_touch_mix');return {mix:JSON.stringify(raw)};},post:()=>{}};
- const req=name=>name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listenWithFallback:()=>Promise.resolve(8765),getPortNote:()=>'',getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
+ const req=name=>name==='./lib/clipboard'?require('../device/lib/clipboard'):name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listenWithFallback:()=>Promise.resolve(8765),getPortNote:()=>'',getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
  const ctx=vm.createContext({require:req,process:{on:()=>{}}});vm.runInContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'),ctx);
  const events=[];bridge.on('mix',v=>events.push(['mix',v]));bridge.on('level',v=>events.push(['level',v]));
  handlers.mix();handlers.level(0,2,0.5,'-4.1','dB');await new Promise(r=>setImmediate(r));

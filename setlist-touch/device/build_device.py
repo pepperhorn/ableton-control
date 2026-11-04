@@ -37,6 +37,7 @@ boxes=[
  obj('transport','js transport.js',1000,240),
  obj('lom','js lom.js',20,240),obj('thisdevice','live.thisdevice',500,40),
  msg('refresh','refresh',500,80),msg('ready','ready',500,120),obj('address-set','prepend set',260,120),
+ obj('copy-trigger','t b',500,160),msg('copy-command','copyAddress',500,200),
  obj('index-status','sprintf Indexing scenes %ld / %ld…',260,200),
  msg('address','Starting Setlist Touch…',260,160,presentation=1,presentation_rect=[8,38,310,110]),
  box('open','live.text',[750,40,60,22],text='Open',texton='Open',mode=0,numinlets=1,numoutlets=2,
@@ -49,6 +50,7 @@ boxes=[
  obj('dict','dict setlist_touch_scenes',500,240)
 ]
 lines=[line('node','route'),line('route','defer'),line('defer','fire'),line('fire','lom'),
+ line('address','copy-trigger'),line('copy-trigger','copy-command'),line('copy-command','node'),
  line('route','address-set',1),line('address-set','address'),line('route','window',2,1),
  line('route','ready',3),line('thisdevice','refresh'),line('refresh','lom'),line('lom','node'),
  # route -> deferlow -> prepend fire preserves the index AND exact name symbol.

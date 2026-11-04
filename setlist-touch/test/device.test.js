@@ -35,7 +35,7 @@ test('resize task sleeps while closed, resumes on open and writes only changed g
 test('Node for Max fire carries the name as an intact symbol, including empty names',async()=>{
  const outlets=[];let bridge;
  const max={outlet:(...args)=>outlets.push(args),addHandler:()=>{}};
- const req=name=>name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listenWithFallback:()=>Promise.resolve(8765),getPortNote:()=>'',getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
+ const req=name=>name==='./lib/clipboard'?require('../device/lib/clipboard'):name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listenWithFallback:()=>Promise.resolve(8765),getPortNote:()=>'',getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
  const ctx=vm.createContext({require:req,process:{on:()=>{}}});
  vm.runInContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'),ctx);
  for(const name of ['','[N32] AA','  padded "name"  '])bridge.fire(1,name);
@@ -56,7 +56,7 @@ test('transport commands use deferlow and refresh/Node wiring; generator is dete
 test('Node for Max passes transport selector/target and forwards observed state',async()=>{
  const outlets=[],handlers={};let bridge;
  const max={outlet:(...args)=>outlets.push(args),addHandler:(name,fn)=>handlers[name]=fn};
- const req=name=>name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listenWithFallback:()=>Promise.resolve(8765),getPortNote:()=>'',getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
+ const req=name=>name==='./lib/clipboard'?require('../device/lib/clipboard'):name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listenWithFallback:()=>Promise.resolve(8765),getPortNote:()=>'',getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
  const ctx=vm.createContext({require:req,process:{on:()=>{}}});vm.runInContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'),ctx);
  bridge.transport('play');bridge.transport('stop');bridge.transport('record',1);bridge.transport('record',0);
  a.deepEqual(outlets.filter(o=>o[0]==='transport'),[['transport','play'],['transport','stop'],['transport','record',1],['transport','record',0]]);
@@ -73,7 +73,7 @@ test('progress routes to device status and completion restores the latest addres
  const outlets=[],handlers=[],events=[];let bridge,resolveDict;
  const max={outlet:(...args)=>outlets.push(args),addHandler:(name,fn)=>handlers[name]=fn,
   getDict:()=>new Promise(resolve=>resolveDict=resolve),post:()=>{}};
- const req=name=>name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listenWithFallback:()=>Promise.resolve(8765),getPortNote:()=>'',getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
+ const req=name=>name==='./lib/clipboard'?require('../device/lib/clipboard'):name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listenWithFallback:()=>Promise.resolve(8765),getPortNote:()=>'',getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
  vm.runInNewContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'),{require:req,process:{on:()=>{}}});
  await new Promise(r=>setImmediate(r));const address=outlets.find(o=>o[0]==='address')[1];
  bridge.on('progress',v=>events.push(['progress',v.done]));bridge.on('scenes',()=>events.push(['scenes']));
@@ -115,7 +115,7 @@ test('timing commands route through deferlow into the budgeted LOM worker, ES5',
 test('timing bridge forwards progress/status and request Dict result, forgets it and restores address',async()=>{
  const outlets=[],handlers={};let bridge;
  const max={outlet:(...args)=>outlets.push(args),addHandler:(name,fn)=>handlers[name]=fn,getDict:async()=>({result:JSON.stringify({ok:true,created:2,existing:1,noSource:0})})};
- const req=name=>name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listenWithFallback:()=>Promise.resolve(8765),getPortNote:()=>'',getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
+ const req=name=>name==='./lib/clipboard'?require('../device/lib/clipboard'):name==='max-api'?max:name==='./lib/app'?{createApp:options=>{bridge=options.bridge;return {listenWithFallback:()=>Promise.resolve(8765),getPortNote:()=>'',getConfig:()=>({port:8765})};}}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
  vm.runInNewContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'),{require:req,process:{on:()=>{}},setTimeout,clearTimeout});
  await new Promise(r=>setImmediate(r));const address=outlets.find(o=>o[0]==='address')[1];
  const pending=bridge.buildTiming({confirmPlaying:true});a.deepEqual(outlets.at(-1),['timing','timingBuild',1,1]);
@@ -141,7 +141,7 @@ test('startup fallback note and failure reach the panel; ready only follows succ
   const note='Port 8765 was busy — now on 8766';
   const error='Ports 8765–8784 are busy. Close the other program or set "port" in config.json, then reload the device.';
   const max={outlet:(...args)=>outlets.push(args),addHandler:(name,fn)=>handlers[name]=fn,post:()=>{}};
-  const req=name=>name==='max-api'?max:name==='./lib/app'?{createApp:()=>({listenWithFallback:()=>failed?Promise.reject(Error(error)):Promise.resolve(8766),getConfig:()=>({port:8765}),getPortNote:()=>note})}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
+  const req=name=>name==='./lib/clipboard'?require('../device/lib/clipboard'):name==='max-api'?max:name==='./lib/app'?{createApp:()=>({listenWithFallback:()=>failed?Promise.reject(Error(error)):Promise.resolve(8766),getConfig:()=>({port:8765}),getPortNote:()=>note})}:name==='./lib/config'?{loadConfig:()=>({})}:require(name);
   vm.runInNewContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'),{require:req,process:{on:()=>{}}});
   await new Promise(r=>setImmediate(r));
   const text=outlets.find(o=>o[0]==='address')[1];

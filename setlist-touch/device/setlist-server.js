@@ -1,6 +1,7 @@
 'use strict';
 const max = require('max-api');
 const os = require('os');
+const {copyText} = require('./lib/clipboard');
 const {EventEmitter} = require('events');
 const {createApp} = require('./lib/app');
 const {loadConfig, saveConfig} = require('./lib/config');
@@ -43,7 +44,7 @@ max.addHandler('timingProgress', (done,total) => {
   if (!timingPending) return;
   clearTimeout(timingPending.timer); timingPending.timer = setTimeout(timingPending.expire,10000);
   bridge.emit('timingProgress',{done,total});
-  max.outlet('address', 'Building timing clips ' + done + ' / ' + total);
+  panelStatus('address', 'Building timing clips ' + done + ' / ' + total);
 });
 max.addHandler('timingResult', async id => {
   const entry = timingPending;
@@ -55,7 +56,7 @@ max.addHandler('timingResult', async id => {
   finally {
     max.outlet('timing','timingForget',id);
     if (entry && entry.id === id) { clearTimeout(entry.timer); if (timingPending === entry) timingPending = null; }
-    if (lastAddress && !indexing) max.outlet('address',lastAddress);
+    if (lastAddress && !indexing) panelStatus('address',lastAddress);
   }
 });
 bridge.setEffectSend = (effectIndex, returnIndex, value) => {
@@ -71,15 +72,34 @@ max.addHandler('transport', (is_playing, record_mode, tempo, current_song_time, 
 });
 bridge.fire = (index, name) => max.outlet('fire', index, name);
 let sceneRead = Promise.resolve();
-let lastAddress = '', indexing = false, startupFailed = false;
+let lastAddress = '', phoneUrl = '', indexing = false, startupFailed = false;
+let normalStatus = ['address', 'Starting Setlist Touch…'], copyTimer = null, copySerial = 0;
+function panelStatus(...status) {
+  normalStatus = status;
+  if (!copyTimer) max.outlet(...status);
+}
+max.addHandler('copyAddress', async () => {
+  if (!phoneUrl || startupFailed) return;
+  const url = phoneUrl, serial = ++copySerial;
+  if (copyTimer) { clearTimeout(copyTimer); copyTimer = null; max.outlet(...normalStatus); }
+  let feedback;
+  try { await copyText(url); feedback = 'Copied: ' + url; }
+  catch (error) {
+    max.post('Setlist Touch clipboard: ' + error.message);
+    feedback = "Couldn't copy — address: " + url;
+  }
+  if (serial !== copySerial || phoneUrl !== url || startupFailed) return;
+  max.outlet('address', feedback);
+  copyTimer = setTimeout(() => { copyTimer = null; max.outlet(...normalStatus); }, 2000);
+});
 max.addHandler('progress', (done, total) => {
   if (!Number.isInteger(done) || !Number.isInteger(total) || done < 0 || total < done) return;
   // Completion follows the final Dict read, so clients keep the status until the set arrives.
   sceneRead.then(() => {
     indexing = done < total;
     bridge.emit('progress', {done, total});
-    if (indexing && !startupFailed) max.outlet('progress', done, total);
-    else if (lastAddress) max.outlet('address', lastAddress);
+    if (indexing && !startupFailed) panelStatus('progress', done, total);
+    else if (lastAddress) panelStatus('address', lastAddress);
   });
 });
 max.addHandler('scenes', () => {
@@ -109,8 +129,9 @@ function address(port) {
   const interfaces = Object.values(os.networkInterfaces()).flat();
   const ip = interfaces.find(i => (i.family === 'IPv4' || i.family === 4) && !i.internal);
   const note = app.getPortNote();
-  lastAddress = (note ? note + '\n' : '') + `http://${ip ? ip.address : '127.0.0.1'}:${port}`;
-  if (!indexing) max.outlet('address', lastAddress);
+  phoneUrl = `http://${ip ? ip.address : '127.0.0.1'}:${port}`;
+  lastAddress = (note ? note + '\n' : '') + phoneUrl;
+  if (!indexing) panelStatus('address', lastAddress);
   max.outlet('url', `http://127.0.0.1:${port}/`);
 }
 bridge.addressChanged = address;
@@ -119,5 +140,5 @@ app.listenWithFallback(app.getConfig().port).then(port => {
   address(port);
   // Node startup can finish after live.thisdevice; request a fresh snapshot.
   max.outlet('ready');
-}).catch(error => {startupFailed = true; lastAddress = error.message; indexing = false; max.outlet('address', lastAddress); max.post('Setlist Touch: ' + error.message);});
+}).catch(error => {startupFailed = true; phoneUrl = ''; lastAddress = error.message; indexing = false; panelStatus('address', lastAddress); max.post('Setlist Touch: ' + error.message);});
 process.on('SIGTERM', () => app.close().then(() => process.exit(0)));

@@ -59,6 +59,8 @@ None.
 ---
 ## Receiver ack
 
+Acknowledged by Codex, 2026-11-04. I will wire the address click through a bare trigger to a Node copyAddress command, copy only the ready server URL using a built-in clipboard subprocess, and restore current panel status after temporary copy feedback. I own only the files listed above and my 0014 handoffs. I will cover wiring, readiness, status restoration and clipboard failures, run the full tests and deterministic build, then push orch/0014-copy-address and open a draft PR. No open questions. GBrain searched for m4l-control/setlist-touch; no relevant project results were returned. No GBrain writes.
+
 ---
 ## Return
 (write in …--codex-to-lead.md)
