@@ -38,10 +38,11 @@ boxes=[
  obj('lom','js lom.js',20,240),obj('thisdevice','live.thisdevice',500,40),
  msg('refresh','refresh',500,80),msg('ready','ready',500,120),obj('address-set','prepend set',260,120),
  obj('index-status','sprintf Indexing scenes %ld / %ld…',260,200),
- msg('address','Starting Setlist Touch…',260,160,presentation=1,presentation_rect=[8,38,310,22]),
+ msg('address','Starting Setlist Touch…',260,160,presentation=1,presentation_rect=[8,38,310,110]),
  box('open','live.text',[750,40,60,22],text='Open',texton='Open',mode=0,numinlets=1,numoutlets=2,
      parameter_enable=0,presentation=1,presentation_rect=[8,8,70,25]),
- obj('select-open','sel 1',750,80),msg('open-message','showwindow',750,120),
+ obj('select-open','t b b',750,80),msg('pcontrol-open','open',900,120),
+ obj('pcontrol','pcontrol',900,160),msg('open-message','showwindow',750,120),
  obj('window','p touch-window',750,240,patcher=window),
  obj('midiin','midiin',1000,40),obj('midiout','midiout',1000,80),
  # A named dict keeps shared data alive independently of the js wrapper.
@@ -51,7 +52,8 @@ lines=[line('node','route'),line('route','defer'),line('defer','fire'),line('fir
  line('route','address-set',1),line('address-set','address'),line('route','window',2,1),
  line('route','ready',3),line('thisdevice','refresh'),line('refresh','lom'),line('lom','node'),
  # route -> deferlow -> prepend fire preserves the index AND exact name symbol.
- line('open','select-open'),line('select-open','open-message'),line('open-message','window'),
+ # Trigger fires right-to-left: pcontrol opens before the helper fits/fronts.
+ line('open','select-open'),line('select-open','pcontrol-open',1),line('pcontrol-open','pcontrol'),line('pcontrol','window'),line('select-open','open-message'),line('open-message','window'),
  line('midiin','midiout'),line('route','send-defer',4),line('send-defer','send'),line('send','mix'),
  line('refresh','mix'),line('ready','lom'),line('ready','mix'),line('ready','transport'),line('mix','node'),
  # Preserve existing selectors; the unmatched outlet feeds the transport lane.

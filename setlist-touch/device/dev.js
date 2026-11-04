@@ -10,7 +10,7 @@ bridge.on('setSend', value => console.log('setSend', JSON.stringify(value)));
 bridge.on('transportCommand', value => console.log('transport', JSON.stringify(value)));
 bridge.on('fire', index => console.log('fire', index));
 app.listen(config.port).then(port => {
-  console.log(`Setlist Touch fixture: http://localhost:${port}/ (0.0.0.0)`);
+  console.log(`Setlist Touch fixture: http://127.0.0.1:${port}/ (0.0.0.0)`);
   const stop = bridge.simulate({scene:fixture.find(s => s.name === '[N32] AA').index, bpm:100});
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {stop(); await app.close(); process.exit(0);});
 }).catch(error => {console.error(error.message); process.exitCode = 1;});
