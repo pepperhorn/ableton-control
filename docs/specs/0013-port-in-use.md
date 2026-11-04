@@ -32,3 +32,19 @@ Windows has a second trap. Binding `0.0.0.0:8765` can **succeed** while another 
 - The panel stays on "Starting…" with no explanation.
 - The device silently serves on a port where `localhost` reaches another program.
 - A damaged config gets overwritten.
+
+## Added 2026-11-04: Open button does nothing (user report)
+The device's **Open** button has never opened the window on the user's machine. Current chain (`build_device.py`):
+`live.text` (mode 0) → `sel 1` → `showwindow` → `p touch-window` → `js touch-window.js` sets `this.patcher.wind.visible`.
+
+Suspected causes:
+- in button mode `live.text` may output a bang, which `sel 1` never matches
+- setting `wind.visible` from js inside a device subpatcher may not open the window
+
+Fix:
+- Open fires on any output from the button.
+- Open the subpatcher through the standard `pcontrol` → `open` into `p touch-window`.
+- Still send `showwindow`/bang to `touch-window.js` so the jweb resizes.
+- Bring the window to front if it is already open.
+- Keep the build deterministic.
+- Add a test that inspects the generated patch wiring: the Open path reaches a `pcontrol` that is connected to the window subpatcher.

@@ -7,7 +7,7 @@
 - **PR:** (opened by implementer)
 - **Base commit:** 0cdf6087c6ce3d253868657206caf304f9065260
 - **Port (if running a server):** 5330
-- **Status:** open
+- **Status:** open (scope extended 2026-11-04: Open button, see spec "Added" section)
 
 ## Goal
 When the configured port is busy (bind error, or Windows shadowing where localhost reaches another program), the device moves to the next free port, saves it, and says so on the device panel and the settings page. Done means every spec behaviour has a test, tests pass and a draft PR is open.
