@@ -99,7 +99,7 @@ test('IPv6-only shadow is rejected at startup and for an exact Settings change',
  a.equal((await request(active)).status,200);
  const startup=appFor(t);const next=await startup.listenWithFallback(target);a.ok(next>target);a.match(startup.getPortNote(),/was busy/);
 });
-test('IPv6 refusal is allowed after the IPv4 nonce succeeds',async t=>{
+test('wrong IPv4 nonce is rejected and Settings accepts Host 127.0.0.1',async t=>{
  const app=appFor(t);const port=await app.listen(0);
  a.equal(await probeLoopback(port,'wrong-nonce'),false);
  a.equal((await request(port)).status,200); // Settings accepts Host 127.0.0.1.
@@ -140,4 +140,55 @@ test('unavailable IPv6 is allowed after a successful IPv4 probe',async t=>{
   return original.call(this,options,...args);
  });
  const app=appFor(t);const port=await app.listen(0);a.equal(ipv6,1);a.equal((await request(port)).status,200);
+});
+
+for (const mode of ['hanging connect','slow refusal']) test(`IPv6 ${mode} keeps the configured port within one connect deadline`,async t=>{
+ const free=await server(t),port=free.address().port;await new Promise(r=>free.close(r));
+ const original=http.get;let calls=0,destroyed=0,seen;
+ const ipv6Started=new Promise(resolve=>seen=resolve);
+ t.mock.timers.enable({apis:['setTimeout','Date']});
+ t.mock.method(http,'get',function(options,...args){
+  if(options.hostname!=='::1')return original.call(this,options,...args);
+  calls++;const req=new EventEmitter(),socket=new EventEmitter();socket.connecting=true;
+  const refusal=mode==='slow refusal'?setTimeout(()=>{const error=Error('refused');error.code='ECONNREFUSED';req.emit('error',error);},2000):null;
+  req.destroy=()=>{destroyed++;clearTimeout(refusal);};
+  process.nextTick(()=>{req.emit('socket',socket);seen();});return req;
+ });
+ let saves=0;const app=appFor(t,{config:{...config,port},saveConfig:()=>saves++}),began=Date.now();
+ const startup=app.listenWithFallback(port);await ipv6Started;
+ t.mock.timers.tick(1000);
+ a.equal(await startup,port);a.equal(Date.now()-began,1000);a.equal(calls,1);a.equal(destroyed,1);
+ a.equal(saves,0);a.equal(app.getPortNote(),'');a.equal(app.getConfig().port,port);
+});
+test('connected IPv6 with no nonce retries once then remains busy',async t=>{
+ const nonce='connected-test',s=await server(t,(req,res)=>res.end(nonce));
+ const original=http.get;let calls=0,seen;const started=[];
+ t.mock.timers.enable({apis:['setTimeout']});
+ t.mock.method(http,'get',function(options,...args){
+  if(options.hostname!=='::1')return original.call(this,options,...args);
+  calls++;const req=new EventEmitter(),socket=new EventEmitter();socket.connecting=true;req.destroy=()=>{};
+  process.nextTick(()=>{req.emit('socket',socket);socket.emit('connect');if(seen){const notify=seen;seen=null;notify();}else started.push(true);});return req;
+ });
+ const nextAttempt=()=>started.length?(started.pop(),Promise.resolve()):new Promise(resolve=>seen=resolve);
+ const probe=probeLoopback(s.address().port,nonce);
+ await nextAttempt();t.mock.timers.tick(1000);
+ await nextAttempt();t.mock.timers.tick(1000);
+ a.equal(await probe,false);a.equal(calls,2);
+});
+test('repeated listen errors collapse into ranges in fallback notes and terminal errors',async t=>{
+ const original=http.Server.prototype.listen;let limit=32004;
+ t.mock.method(http.Server.prototype,'listen',function(...args){
+  if(args[0]>=32000&&args[0]<=limit) {
+   process.nextTick(()=>{const error=Error('listen EACCES: permission denied 0.0.0.0:'+args[0]);error.code='EACCES';this.emit('error',error);});return this;
+  }
+  return original.apply(this,args);
+ });
+ const app=appFor(t);const port=await app.listenWithFallback(32000);
+ a.ok(port>=32005);a.match(app.getPortNote(),/^Ports 32000–32004: listen EACCES: permission denied 0\.0\.0\.0/);
+ a.equal(app.getPortNote().match(/permission denied/g).length,1);
+ limit=32019;
+ await a.rejects(appFor(t).listenWithFallback(32000),error=>{
+  a.match(error.message,/Ports 32000–32019: listen EACCES: permission denied/);
+  a.equal(error.message.match(/permission denied/g).length,1);a.ok(error.message.length<250);return true;
+ });
 });

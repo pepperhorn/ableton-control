@@ -11,15 +11,25 @@ const {loadConfig, saveConfig: persist, validConfig} = require('./config');
 // Bound each attempt even when a shadow server hangs or streams forever.
 function probeAddress(port, nonce, hostname) {
   return new Promise(resolve => {
-    let settled = false, data = '';
+    let settled = false, connected = false, data = '';
     const finish = result => { if (settled) return; settled = true; clearTimeout(timer); request.destroy(); resolve(result); };
     const request = http.get({hostname, port, path:'/_setlist_probe/' + nonce, agent:false}, res => {
+      connected = true;
       res.on('data', chunk => { data += chunk; if (data.length > 128) finish('busy'); });
       res.on('end', () => finish(res.statusCode === 200 && data === nonce ? 'ok' : 'busy'));
       res.on('error', () => finish('busy'));
     });
-    const timer = setTimeout(() => finish('timeout'), 1000);
-    request.on('error', error => finish(['ECONNREFUSED','EAFNOSUPPORT','EADDRNOTAVAIL','ENETUNREACH','EHOSTUNREACH','EPROTONOSUPPORT'].includes(error.code) ? 'unavailable' : 'busy'));
+    request.on('socket', socket => {
+      if (!socket.connecting && !socket.destroyed) connected = true;
+      else socket.once('connect', () => { connected = true; });
+    });
+    // Windows may take seconds to refuse a closed IPv6 loopback port. A TCP
+    // handshake that never completed is unavailable, not a shadow listener.
+    const timer = setTimeout(() => finish(hostname === '::1' && !connected ? 'unavailable' : 'timeout'), 1000);
+    request.on('error', error => {
+      const unavailable = ['ECONNREFUSED','EAFNOSUPPORT','EADDRNOTAVAIL','ENETUNREACH','EHOSTUNREACH','EPROTONOSUPPORT'].includes(error.code);
+      finish(unavailable && !(hostname === '::1' && connected) ? 'unavailable' : 'busy');
+    });
   });
 }
 async function probeLoopback(port, nonce) {
@@ -30,6 +40,20 @@ async function probeLoopback(port, nonce) {
     if (result !== 'ok' && !(hostname === '::1' && result === 'unavailable')) return false;
   }
   return true;
+}
+// Ignore the changing address suffix when grouping repeated OS listen errors.
+function failureReason(failure) {
+  if (failure.busy) return 'busy';
+  return failure.message.replace(/(\b(?:\d{1,3}\.){3}\d{1,3}|\[::[^\]]*\]):\d+\b/g, '$1');
+}
+function failureSummary(failures) {
+  const runs = [];
+  for (const failure of failures) {
+    const reason = failureReason(failure), previous = runs[runs.length - 1];
+    if (previous && previous.last + 1 === failure.port && previous.reason === reason) previous.last = failure.port;
+    else runs.push({first:failure.port, last:failure.port, reason});
+  }
+  return runs.map(run => (run.first === run.last ? 'Port ' + run.first : 'Ports ' + run.first + '–' + run.last) + ': ' + run.reason).join('; ');
 }
 function createApp({bridge, config = loadConfig(), saveConfig = persist,
   probe = probeLoopback, webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
@@ -415,7 +439,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         cfg = {...cfg, port:attempt};
         if (attempt !== port) {
           const reason = failures.every(f => f.busy) ? 'Port ' + port + ' was busy' :
-            failures.map(f => 'Port ' + f.port + (f.busy ? ' was busy' : ' failed: ' + f.message)).join('; ');
+            failureSummary(failures);
           portNote = reason + ' — now on ' + attempt;
           if (configWarning) portNote += '. In memory only: damaged or unreadable config.json was not overwritten.';
           else {
@@ -426,7 +450,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         return attempt;
       }
       const reasons = failures.filter(f => !f.busy);
-      if (reasons.length) throw Error('Could not listen on ports ' + port + '–' + last + '. ' + reasons.map(f => 'Port ' + f.port + ': ' + f.message).join('; ') + '. Close the other program or set "port" in config.json, then reload the device.');
+      if (reasons.length) throw Error('Could not listen on ports ' + port + '–' + last + '. ' + failureSummary(failures) + '. Close the other program or set "port" in config.json, then reload the device.');
       throw Error('Ports ' + port + '–' + last + ' are busy. Close the other program or set "port" in config.json, then reload the device.');
     },
     getPortNote() { return portNote; },

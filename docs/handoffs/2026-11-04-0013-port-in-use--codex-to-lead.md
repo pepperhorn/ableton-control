@@ -16,13 +16,13 @@
 Startup now tries up to 20 sequential ports, capped at 65535, and verifies that loopback actually reaches this app. It saves a successful fallback when safe and reports fallback/failure on the device panel and fallback on laptop Settings. Settings changes still require the exact requested port. Open now uses standard pcontrol opening before resizing and fronting the window.
 
 ## Scope and owned files
-Changed only `setlist-touch/device/lib/app.js`, `setlist-server.js`, `build_device.py`, generated `SetlistTouch.maxpat`/`.amxd`, `touch-window.js` (lead extension), Settings files `device/web/index.html` and `device/web/js/app.js`, `setlist-touch/README.md`, tests `port.test.js`, `device.test.js`, `mix.test.js`, and the two 0013 handoffs. Existing config loading/warning behavior was reused without a config.js edit.
+Changed only `setlist-touch/device/lib/app.js`, `setlist-server.js`, `build_device.py`, generated `SetlistTouch.maxpat`/`.amxd`, `touch-window.js` (lead extension), `dev.js` (lead R3 extension), Settings files `device/web/index.html` and `device/web/js/app.js`, `setlist-touch/README.md`, tests `port.test.js`, `device.test.js`, `mix.test.js`, and the two 0013 handoffs. Existing config loading/warning behavior was reused without a config.js edit.
 
 No ledger, GBrain, protected LOM/mix/player source, root device, or other docs edits. No merge, live writes, or firewall changes. Initial receiver ack was committed first as 1e43838; implementation and return handoff are committed as ae91410, followed by the PR-link documentation commit.
 
 ## Acceptance criteria and evidence
 - Bind failure falls forward; actual HTTP listener and disk readback verify persistence.
-- Shared nonce loopback check verifies exact response on IPv4 and IPv6, with a one-second absolute deadline per attempt and byte cap. Timeouts retry once; IPv6 refusal/unavailability is permitted, and foreign IPv6 answers are busy. A foreign HTTP 200 and a hanging server are rejected. Injected probe models the Windows shadowed-bind case for both startup and Settings, including release of the rejected listener. R2 also tests a real IPv6-only foreign listener (no skip on this machine), IPv6 refusal/unavailability, one timeout retry and no retry for wrong responses, plus actual bind-error handling through injected EACCES listen errors.
+- Shared nonce loopback check verifies exact response on IPv4 and IPv6, with a one-second absolute deadline per attempt and byte cap. IPv4 timeouts and connected IPv6 response timeouts retry once; an IPv6 TCP connect still pending at its deadline is unavailable with no retry. IPv6 refusal/unavailability is permitted, and foreign IPv6 answers are busy. A foreign HTTP 200 and a hanging server are rejected. Injected probe models the Windows shadowed-bind case for both startup and Settings, including release of the rejected listener. R2 also tests a real IPv6-only foreign listener (no skip on this machine), IPv6 refusal/unavailability, one timeout retry and no retry for wrong responses, plus actual bind-error handling through injected EACCES listen errors.
 - Failure is bounded to 20 ports and capped at 65535, with the spec's full actionable panel text. Failure remains visible if indexing progress arrives later. Ready and jweb URL are emitted only after successful startup.
 - Damaged and unreadable config tests verify no save call; damaged bytes remain intact. Write failure keeps the server running with a visible memory-only warning.
 - Settings busy ports are refused without a fallback or save, preserving the old server/config. Existing occupied-bind settings test also passes.
@@ -44,9 +44,9 @@ git diff --stat origin/main...HEAD
 
 Verification output (Node 22; built-in test runner):
 ```text
-# tests 294
+# tests 298
 # suites 0
-# pass 294
+# pass 298
 # fail 0
 # cancelled 0
 # skipped 0
@@ -59,15 +59,15 @@ The device test rebuilds and compares both artifacts byte for byte. `git diff --
 - Kept exact `listen()` for development/tests; added `listenWithFallback()` for device startup, sharing the same verified bind used by settings.
 - Probe endpoint is random per app/process and only returns its nonce to real trusted loopback requests, before ordinary authentication so test-injected client identities cannot affect startup checks. It exposes no app data.
 - Close/destroy rejected listeners and their sockets before trying another port. An already damaged/unreadable config is never automatically saved; normal startup on its original port performs no extra save. Explicit settings-save behavior remains as before.
-- Only EADDRINUSE and failed nonce probes are busy. Other listen errors retain their actual message in Settings, and startup still tries subsequent ports while retaining those reasons in the success note or terminal error.
+- Only EADDRINUSE and failed nonce probes are busy. Other listen errors retain their actual message in Settings, and startup still tries subsequent ports while retaining those reasons in the success note or terminal error. Adjacent failed ports sharing the same reason collapse into a range after normalizing the changing address-port suffix.
 - Port notes last for the process lifetime, clearing on a successful explicit port change; a fresh clean startup has no fallback note.
 - Open relies on pcontrol to open the subpatcher and `patcher.front()` to raise it, replacing the helper's direct `wind.visible` assignment.
 
 ## Windows / Live acceptance still required
-1. Copy the entire rebuilt device folder into Live on Windows. Open must show the jweb window, resize correctly and bring it to the front on repeated presses, including after closing and reopening it.
+1. Copy the entire rebuilt device folder into Live on Windows. With nothing listening on `[::1]`, a normal load must start on the configured port without delay, no fallback note, and no port/config change. Open must show the jweb window, resize correctly and bring it to the front on repeated presses, including after closing and reopening it.
 2. Occupy the configured port, load the device and check the fallback text plus complete phone URL fit the panel. Confirm the embedded line break actually puts the URL on a separate line in Max. Confirm Open loads this app at `http://127.0.0.1:<port>/` on the displayed port and Settings shows the same note. Restart after freeing the old port and confirm the saved new port remains stable.
 3. Where Windows permits a specific loopback listener alongside a wildcard bind, verify the foreign app is rejected and startup falls forward. Also occupy only `[::1]:<port>` and confirm startup falls forward while Open stays on 127.0.0.1. This environment tested a real IPv6-only listener and injected the IPv4 shadow case; neither establishes physical Windows behavior.
-4. Exercise Settings against that shadowed port: clear busy error, no fallback, old URL still works. Occupy all candidates and check the panel failure text is legible and remains visible during indexing. Confirm `"port"` renders with plain double quotes, without visible backslashes. Test a permission-denied startup/settings bind and confirm its actual reason is shown instead of busy wording.
+4. Exercise Settings against that shadowed port: clear busy error, no fallback, old URL still works. Occupy all candidates and check the panel failure text is legible and remains visible during indexing. Repeated permission-denied ports should show one compact range, not a line for every port. Confirm `"port"` renders with plain double quotes, without visible backslashes. Test a permission-denied startup/settings bind and confirm its actual reason is shown instead of busy wording.
 5. Test damaged/unreadable and unwritable config cases on a disposable copy. Confirm memory-only wording, no automatic damaged-file replacement and working Open URL.
 6. Check Max's actual node.exe allow/block rule, intended-network firewall access, phone authentication and LAN/Tailscale reachability. Existing rules can suppress the first-listen prompt.
 
@@ -79,3 +79,6 @@ GBrain was searched for `m4l-control port`; no relevant guidance returned and no
 
 ## R2 response to Opus review
 Read the review on PR #10 at e49f045 and applied all four lead decisions. The nonce probe now checks `127.0.0.1` and `::1`; IPv6 refuses/unavailable is accepted, but a foreign response is not. Each timed-out address gets exactly one retry; wrong responses fail immediately. jweb's URL outlet and all README local URL examples use 127.0.0.1, and the existing Settings Host acceptance is verified. EACCES and other non-busy listen messages are preserved in Settings and startup reporting, while startup continues through the bounded port range. Panel line breaks and plain double quotes remain intact, with explicit Windows checks above. No additional scope changes or GBrain/ledger writes.
+
+## R3 response to Opus review
+Read the round-2 review at 6e886bc and applied all lead decisions. IPv6 now tracks the TCP socket connect event: no completed handshake by the one-second deadline is unavailable, with no retry; an established connection without a valid nonce still retries a response timeout once and remains busy on failure. IPv4 behavior is unchanged. Two fake-clock startup regressions simulate a hanging connect and a two-second refusal; both finish on the configured port after exactly one deadline, one IPv6 attempt, no save and no fallback note. A separate connected-but-silent IPv6 regression still fails after two response attempts. Range tests cover both fallback and terminal permission errors with changing port suffixes, proving one compact reason per consecutive run. Renamed the wrong-nonce test to match its assertions and changed the development fixture URL to 127.0.0.1. The normal-load Windows check above remains a physical acceptance gate; Linux/fake-clock tests do not prove it. No GBrain/ledger writes or merges.
