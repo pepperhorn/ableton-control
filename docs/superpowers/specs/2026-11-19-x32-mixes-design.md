@@ -1,10 +1,10 @@
 # X32 in-ear mixes, upcoming scenes and personal links (Setlist Touch)
 
-Date: 2026-11-19 · Status: draft for user approval
+Date: 2026-11-19 · Status: draft for user approval (builder check done)
 Builds on: in-ear mix pages (0002), Monitor and band access (0008, 0009), add player (0011), port fallback and copy address (0013, 0014). All are merged under `setlist-touch/`.
 
 ## Intent
-The band wants one web page on each musician's phone that shows the upcoming scenes and controls that musician's own in-ear mix. Today the in-ear mixes are Ableton return tracks. The band's interface is a Behringer X32, so the mixes should live on X32 mix buses, the way Behringer's own apps (X32-Q, Mixing Station) do it. The difference from those apps is that scenes and mixes are on one page, behind the same members and permissions as Setlist Touch.
+The band wants one web page on each musician's phone that shows the upcoming scenes and controls that musician's own in-ear mix. Today the in-ear mixes are Ableton return tracks. The band's interface is a Behringer X32, so the mixes should live on X32 mix buses, the way Behringer's own apps (X32-Q, Mixing Station) do it. The difference from those apps is that scenes and mixes are in one web app, behind the same members and permissions as Setlist Touch.
 
 ## The gig setup (user)
 - An Apple router is plugged into the X32's Ethernet port, and the X32 is a client of that router. The laptop (Ableton + Setlist Touch) and every phone join the router's Wi-Fi. There's no Tailscale and no internet.
@@ -12,7 +12,7 @@ The band wants one web page on each musician's phone that shows the upcoming sce
 - Phones open the laptop's address in a browser. There's no PWA or app install (user decision). The address is shared by copying it from the device panel (0014).
 
 ## Goals
-1. **Upcoming scenes.** On the Monitor page, show the current scene with N scenes before and after it. Each one shows its Ableton name, its Ableton colour, and its bar count when known. N is set in a system setting for before and after separately. The default is 2 before and 2 after.
+1. **Upcoming scenes.** On the Monitor tab, in large text, show the current scene with N scenes before and after it. Each one shows its Ableton name, its Ableton colour, and its bar count when known. N is set in a system setting for before and after separately. The default is 2 before and 2 after.
 2. **X32 mixes.** Each member is assigned an X32 mix bus. Their mix page controls the send levels into that bus on the X32, plus the bus master level.
 3. **Personal links.** `http://<laptop-ip>:<port>/<member-slug>` (e.g. `/shaun`) opens straight into that member's view without the name picker.
 4. **Optional password.** A blank band password means phones on the LAN can connect with no login.
@@ -20,6 +20,9 @@ The band wants one web page on each musician's phone that shows the upcoming sce
 ## Decided by the user
 - **Mixes run on X32 mix buses, not Ableton sends**, "like you would with the Behringer apps".
 - **Mix page layout:** X32 channels in a horizontal scroll, desk style. Each strip has the name and a fader. **Show/hide:** a hidden channel is dimmed and moved to the end of the list until it is activated again. **The musician's bus master is always the first strip and is sticky:** it stays put while the others scroll.
+- **Monitor tab:** full, large text with scenes before, the current one and the next ones, on its own tab. Touch lock is on by default. Admin can release triggering (launching scenes) to musicians by name.
+- **Mix view:** a slim combined scene bar across the top, which each musician can hide.
+- **Who they are:** an overlay on load to pick their name, saved as a cookie, expiring after 24 hours or on log out.
 - **Scene window:** a system config option for how many scene labels to show before and after. Each shows the bar count if available, in Ableton scene colours. The default is 2 before and 2 after.
 - **No PWA:** share the server IP.
 - **Personal page per user**, e.g. `http://IP/shaun`.
@@ -33,7 +36,7 @@ The band wants one web page on each musician's phone that shows the upcoming sce
 
 ## Behaviour
 
-### Upcoming scenes (Monitor page)
+### Upcoming scenes (Monitor tab)
 - **Settings:** two system settings, scenes before (0–8) and scenes after (0–8). Both default to 2. They live in admin and apply to every phone.
 - **The list:** a vertical list with the current scene in the middle.
   - The current scene is largest, with its progress bar and `bar / total`.
@@ -41,6 +44,9 @@ The band wants one web page on each musician's phone that shows the upcoming sce
   - The queued scene keeps its existing flash (0008).
 - **Each row:** the scene's exact name, its Ableton colour, and its bar count (`8 bars`) when the timing track gives one (0006). The bar count is left out when there isn't one.
 - **Song edges:** the window stops at the current song's edges. It never shows a category row or another song's sections. The `■ End` row (0001) counts as a scene. Near the edges, it shows fewer rows rather than padding.
+- **Large text:** the Monitor tab is sized to read from a mic stand. Rows use large type, and the current scene is largest.
+- **Touch lock on by default:** the Monitor tab opens locked. Unlocking uses the existing lock control (0001).
+- **Launching from Monitor:** while unlocked, tapping a row launches that scene, with the same clean-tap rules as Scenes. This only works for members admin has released triggering to. Admin does this per member by name, using the existing scene-launch permission (the `scenes` page permission in 0009, labelled "Can launch scenes" in admin). Everyone else's Monitor stays read-only, unlocked or not.
 - **When nothing is playing:** keep the existing Monitor states ("Stopped", "Playing" with no tracked scene). Showing a window around the selected scene when stopped is left to the builder (see below).
 
 ```
@@ -72,7 +78,8 @@ The band wants one web page on each musician's phone that shows the upcoming sce
 - **Stereo-linked pairs:** if the desk has the bus linked to its partner (e.g. 5/6), it shows as one mix named after the odd bus. Writes go to whatever address the desk uses for a linked pair (left to the builder; see below).
 - **Permissions:** a member's mix permission in X32 mode is the list of buses they may control. By default that is their own bus. Admin can grant more, as with today's mixes.
 - **Personal page tabs:** the mix page shows one tab per bus the member may control. Their own bus comes first.
-- **Admin:** sees and can edit every bus.
+- **Admin:** sees and can edit every bus. To edit a member's view, admin picks the member, then one of their buses, and edits that member's hidden list. *(Lead's call.)*
+- **Buses that feed the PA:** if an assigned bus is routed to Main LR on the desk, admin sees a warning on the assignment. It isn't blocked: admin chooses the buses. *(Lead's call.)*
 
 ### The mix page in X32 mode
 - **Layout:** strips in one horizontal row that scrolls sideways.
@@ -108,6 +115,27 @@ The band wants one web page on each musician's phone that shows the upcoming sce
 └─sticky──┴────┴────┴────┴────┘
 ```
 
+### Scene bar on the mix view
+- **What it shows:** a slim bar across the top of the mix page with the current scene and its `bar / total` progress, then the next one or two scenes with bar counts, in Ableton colours. It is read-only and never launches anything.
+- **Hiding it:** each musician can hide or show it with a toggle on the mix page. The choice is saved on that phone in local storage, because it's a display preference only.
+- **Faders:** the strips use the height left below the bar. They get the full height when it is hidden.
+
+```
+┌ ▶ [V3] Verse 3/8 ▓▓░  → [C2] Chorus 8 ┐  [hide]
+├─────────┬────┬────┬────┬─ → scroll    │
+│ SHAUN   │KICK│SNR │BASS│ …            │
+│  faders …                             │
+```
+
+### Who they are (name picker)
+- **Today (0009):** a "Choose your name" overlay appears on first connect. The choice is saved in a signed, HttpOnly cookie for a year, and there's no log out.
+- **Change:**
+  - The overlay appears on load whenever the phone has no current identity. It lists member names as large buttons.
+  - The choice is saved in the same signed cookie, now **expiring after 24 hours**. The server must read identity on every request and on the live connection, so a cookie fits, not local storage.
+  - The server checks the expiry, not only the browser.
+- **Log out:** a "Log out" control, shown with the member's name in the page header or menu, clears the cookie and brings back the overlay.
+- **Personal link:** `/<slug>` sets the same 24-hour cookie and skips the overlay.
+
 ### Personal links
 - **Address:** `/<slug>` opens the app identified as that member. It does the same as choosing that name in the picker: it sets the existing member cookie, then shows the member's default page.
 - **Slugs:**
@@ -118,9 +146,12 @@ The band wants one web page on each musician's phone that shows the upcoming sce
 - **Unknown slug:** falls back to the normal page with the name picker.
 - **Plain `/`:** works as today.
 - **Honour system, as today:** anyone on the network can open anyone's link.
+- **Identity with member access off:** a personal link, or a name picked in the overlay, still records who the musician is when member access restrictions are off. Permissions then stay fully open, as today. Identity is still used for their own bus first, their hidden lists and the Log out label. *(Lead's call.)*
+- **Admin sign-in survives links:** on a phone with an admin session, opening a personal link keeps admin. It sets the member identity only for display (which bus comes first, which hidden list). *(Lead's call.)*
 
 ### Optional password
-- **Blank password:** LAN clients can connect without credentials. This replaces today's 403 "Set a password in Setlist Touch settings on the laptop." Admin still requires the laptop (loopback) or the admin password, as in 0009.
+- **Explicit switch, off by default:** a new admin setting, "Allow phones without a password", decides whether a blank password lets LAN clients in. With the switch off, a blank password keeps today's 403, so existing installs don't open up when they update. *(Lead's call.)*
+- **Blank password with the switch on:** LAN clients can connect without credentials. This replaces today's 403 "Set a password in Setlist Touch settings on the laptop." Admin still requires the laptop (loopback) or the admin password, as in 0009.
 - **Password set:** HTTP basic auth, as today.
 - **README:** say plainly that with no password, the router's Wi-Fi password is the only gate.
 
