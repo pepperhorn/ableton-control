@@ -27,6 +27,7 @@ let prefs = {}; try { prefs = JSON.parse(localStorage.getItem('setlist-touch') |
 let state = initialState(prefs), set = {songs:[],categories:[],sceneToSong:{}}, play = {playing:-1,fired:-1,playingSongId:null}, pos = null;
 let receivedEmpty = false, timingState = null, timingRequest = false;
 let snapshot = false, initialPlay = false, transport = false, mixSnapshot = false;
+let x32 = {mixSource:'x32',status:{state:'searching'},buses:[],sources:[],levels:{},hidden:{}};
 let mix = {returns:[],strips:[]}, mixState = initialMixState(prefs), mixJSON = null;
 let setJSON = null, indexProgress = null, transportState = null, playSnapshot = false, monitorSongs = [];
 if (state.page === 'monitor') state = {...state,locked:true};
@@ -63,7 +64,7 @@ const visibleMix = () => ({...mix,returns:allowedTabs(mix,me)});
 let accessUI = {render() {},invalidate() {}};
 Promise.all([import('./access-view.js'),import('./access-render.js')]).then(([view,{createAccessRenderer}]) => {
   ({allowedPages,pageFor,allowedTabs} = view); accessLoaded = true;
-  accessUI = createAccessRenderer({meOf:() => me,mixOf:() => mix,refresh:refreshMe,status});
+  accessUI = createAccessRenderer({meOf:() => me,mixOf:() => mix,x32Of:() => x32,refresh:refreshMe,status});
   return refreshMe();
 }).catch(() => status('Could not load member access. Reload to retry.'));
 async function refreshMe() {
@@ -72,7 +73,7 @@ async function refreshMe() {
   const res = await fetch('/api/me'); if (!res.ok) throw new Error('Could not load access');
   const next = await res.json();
   if (sequence !== accessSequence) return;
-  const before = JSON.stringify({pages:me.pages,mixes:me.mixes});
+  const before = JSON.stringify({pages:me.pages,mixes:me.mixes,mixSource:me.mixSource,buses:me.buses});
   const oldPage = state.page, oldTab = mixState.tab;
   me = next; accessReady = true;
   const sceneForm = $('.admin-scene-settings');
@@ -81,13 +82,14 @@ async function refreshMe() {
   const nextPage = pageFor(state.page,me,mixSnapshot ? mix : null);
   state = {...state,page:nextPage,locked:nextPage === 'monitor' && oldPage !== 'monitor' ? true : state.locked};
   if (mixSnapshot) mixState = reduceMix(mixState,{type:'mix'},visibleMix());
-  const changed = before !== JSON.stringify({pages:me.pages,mixes:me.mixes}) || oldPage !== state.page || oldTab !== mixState.tab;
+  const changed = before !== JSON.stringify({pages:me.pages,mixes:me.mixes,mixSource:me.mixSource,buses:me.buses}) || oldPage !== state.page || oldTab !== mixState.tab;
   if (changed) { cancelGestures(); mixUI.render(); }
   if (local && !accessSettingDirty) $('.settings-form').elements.accessEnabled.checked = me.accessEnabled;
   savePrefs(); shell(); accessUI.render();
 }
 const mixUI = createMixRenderer({
-  stateOf:() => ({...state,connected:transport && mixSnapshot && accessReady && location.hash !== '#admin'}), mixOf:visibleMix, viewOf:() => ({...mixState,page:state.page}),
+  x32Of:() => x32, meOf:() => me,
+  stateOf:() => ({...state,connected:transport && (me.mixSource==='x32' || mixSnapshot) && accessReady && location.hash !== '#admin'}), mixOf:visibleMix, viewOf:() => ({...mixState,page:state.page}),
   onTab:name => dispatchMix({type:'tab',name}), onSnapshot:acceptMix, status
 });
 const transportUI = createTransportRenderer({
@@ -112,7 +114,8 @@ function shell() {
   $('.monitor-page').hidden = settingsOpen || state.page !== 'monitor';
   $('.transport-bar').hidden = settingsOpen || !transportEnabled || !me.pages.includes('transport') || state.page === 'monitor';
   syncMonitor(!settingsOpen && state.page === 'monitor');
-  const ready = state.page === 'monitor' ? playSnapshot : state.page === 'mix' ? mixSnapshot && visibleMix().returns.length > 0 : snapshot;
+  // The banner tracks Live; the X32 renderer owns desk connection status.
+  const ready = state.page === 'monitor' ? playSnapshot : state.page === 'mix' ? me.mixSource==='x32' || mixSnapshot && visibleMix().returns.length > 0 : snapshot;
   const indexing = transport && indexProgress && indexProgress.done < indexProgress.total;
   $('.connection-bar').hidden = transport && ready && !indexing;
   $('.connection-label').hidden = !!indexing;
@@ -126,7 +129,7 @@ function shell() {
     $('.index-progress-track').setAttribute('aria-valuetext', `${indexProgress.done} of ${indexProgress.total} scenes`);
   }
   const emptyMessage = noSongsMessage({connected:transport,receivedEmpty,indexing});
-  if (emptyMessage) {
+  if (emptyMessage && !(state.page==='mix' && me.mixSource==='x32')) {
     $('.connection-bar').hidden = false;
     $('.connection-label').textContent = emptyMessage;
   }
@@ -207,6 +210,14 @@ events.addEventListener('open',()=>{refreshMe().catch(()=>status('Could not load
 events.addEventListener('error',()=>{transportState=null;playSnapshot=false;transportUI.reset();transport=false;receivedEmpty=false;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
 events.addEventListener('transport',e=>{transportState=JSON.parse(e.data);transportUI.accept(transportState);paintMonitor();});
 events.addEventListener('mix',e=>acceptMix(JSON.parse(e.data)));
+events.addEventListener('x32',e=>{
+  const previousSource=x32.mixSource;
+  x32=JSON.parse(e.data);
+  // Desk updates must not rebuild Ableton rows or cancel their active gestures.
+  if(x32.mixSource==='x32' || previousSource!==x32.mixSource)mixUI.render();
+  shell();accessUI.render();
+});
+events.addEventListener('x32level',e=>{const level=JSON.parse(e.data);if(!x32.levels[level.bus])x32.levels[level.bus]={};x32.levels[level.bus][level.source]={value:level.value,label:level.label};if(x32.mixSource==='x32')mixUI.updateLevels(level);});
 events.addEventListener('level',e=>{
   const level=JSON.parse(e.data), strip=mix.strips.find(s=>s.trackIndex===level.trackIndex);
   if(!strip || !strip.levels[level.returnIndex])return;

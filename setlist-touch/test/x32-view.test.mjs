@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import a from 'node:assert/strict';
+import {x32Strips,x32Tabs,x32Message} from '../device/web/js/x32-view.js';
+const state = () => ({status:{state:'connected'},buses:[{bus:5,master:0.75},{bus:1,master:0.5}],sources:[{id:'ch/02',kind:'ch',number:2,name:'Vox'},{id:'ch/01',kind:'ch',number:1,name:'',unnamed:true},{id:'auxin/01',kind:'auxin',number:1,name:'Keys'}],levels:{},hidden:{5:['ch/02','master']}});
+test('master first and sticky flag; master never hidden',()=>{const strips=x32Strips(state(),5);a.equal(strips[0].source,'master');a.equal(strips[0].sticky,true);a.equal(strips[0].hidden,false);});
+test('hidden strips go to end and keep desk order',()=>a.deepEqual(x32Strips(state(),5).map(s=>s.source),['master','ch/01','auxin/01','ch/02']));
+test('unnamed sources start hidden; explicit empty list shows everything',()=>{const s=state();s.hidden={};a.equal(x32Strips(s,5).find(v=>v.source==='ch/01').hidden,true);s.hidden[5]=[];a.equal(x32Strips(s,5).some(v=>v.hidden),false);});
+test('disabled while not connected',()=>{const s=state();s.status.state='lost';a.equal(x32Strips(s,5).every(v=>v.disabled),true);});
+test('own bus tab first (server order preserved)',()=>a.deepEqual(x32Tabs(state()).map(b=>b.bus),[5,1]));
+test('no bus message and unavailable bus message',()=>{a.equal(x32Message({status:{state:'connected'},buses:[]}), 'No mix bus assigned');a.equal(x32Message({status:{state:'connected'},buses:[],unavailableBuses:[7]},7),'Bus 7 not available');});

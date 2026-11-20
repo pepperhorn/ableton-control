@@ -106,3 +106,18 @@ body[data-page=monitor] .lock-toggle{display:block}
 .access-controls{align-items:center;flex-wrap:wrap}.member-name{overflow-wrap:anywhere}.member-link{display:flex;gap:8px;width:100%;margin:10px 0}.member-link-url{min-width:0;flex:1;font:inherit}.member-link-copy{flex:none}
 
 .admin-member{min-width:0}.member-link{flex-basis:100%;min-width:0}.member-link-url{width:0}
+/* X32 desk strips share the Poppins type and existing mix lock. */
+.mix-list.mix-strips{position:relative;flex-direction:row;overflow-x:auto;overflow-y:hidden;touch-action:pan-x;gap:8px;min-height:210px;align-items:stretch}
+.mix-strips .mix-strip{flex:0 0 100px;min-width:0;display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:8px;background:#232938;border:1px solid #525c70;border-radius:10px}
+.mix-strip.mix-strip-master{position:sticky;left:0;z-index:2;background:#30394c;box-shadow:5px 0 8px #0007}
+.mix-strip-name{background:var(--strip-color);color:#111;padding:8px 4px;border-radius:5px;min-height:48px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.mix-strip-inverted .mix-strip-name{background:#171b24;color:var(--strip-color);border:2px solid var(--strip-color)}
+.mix-strip-fader{position:relative;flex:1;min-height:90px;margin:8px 22px;background:#0b0f18;border-radius:8px;touch-action:pan-x;user-select:none}
+.mix-strip-fill{position:absolute;bottom:0;width:100%;background:var(--strip-color);opacity:.5;border-radius:8px}
+.mix-strip-thumb{position:absolute;left:-8px;right:-8px;height:16px;transform:translateY(50%);border:2px solid #fff;border-radius:4px;background:#8d98aa;pointer-events:none}
+.mix-strip-db{text-align:center;font-size:12px;white-space:nowrap}.mix-strip-toggle{font:inherit;font-size:12px;min-height:44px;border-radius:6px;border:1px solid #68758d;background:#171d29;color:#fff}
+.mix-strip-hidden .mix-strip-name,.mix-strip-hidden .mix-strip-fader,.mix-strip-hidden .mix-strip-db{opacity:.35}
+.mix-strip-fader[aria-disabled=true]{opacity:.4}.mix-x32-overlay{position:sticky;left:0;align-self:center;z-index:3;background:#171d29ed;padding:20px;min-width:200px}
+.admin-x32-settings{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:20px 0}.admin-x32-settings h3{width:100%}.admin-x32-settings label{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.admin-x32-settings input,.admin-x32-settings select{font:inherit;max-width:100%;padding:8px}.admin-x32-status{width:100%}.admin-buses,.admin-hidden{flex-basis:100%;display:flex;flex-wrap:wrap;gap:12px}.admin-hidden summary{min-height:44px;cursor:pointer}.admin-hidden-list{display:flex;flex-wrap:wrap;gap:12px}.admin-bus-warning{flex-basis:100%;color:#ffc479}
+@media(max-width:600px){.mix-panel:has(.mix-strips){gap:6px;padding-top:8px}.mix-strips .mix-strip{flex-basis:88px;padding:6px;gap:6px}.mix-strip-fader{margin:8px 18px}.mix-panel:has(.mix-strips) .mix-title{font-size:18px}}
+.mix-strip-master-spacer{height:44px;flex:none}

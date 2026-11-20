@@ -170,3 +170,31 @@ test('Monitor launch uses the drawn name even when the current set has renamed i
  vm.runInNewContext(callback,{createMonitorRenderer:opts=>{onLaunch=opts.onLaunch;},document:{querySelector:()=>row},monitorSongs:[{rows:[{sceneIndex:23,name:'Renamed title'}]}],launch:r=>{launched=r.dataset.name;}});
  onLaunch(23);a.equal(launched,'Drawn title');
 });
+
+test('X32 members can reach mix page with no assigned or available bus; none identity cannot',()=>{
+ a.ok(allowedPages({...member,mixes:[],mixSource:'x32',buses:[]},{returns:[]}).includes('mix'));
+ a.ok(!allowedPages({kind:'none',pages:['monitor'],mixes:[],mixSource:'x32',buses:[]},{returns:[]}).includes('mix'));
+});
+
+test('X32 loss does not show a waiting-for-Live banner while Live transport is connected',async()=>{
+ const h=shellHarness();await flush();h.pending.shift()({...h.full,mixSource:'x32',buses:[5]});await flush();
+ h.events.emit('open');
+ for(const state of ['searching','lost','connected']) {
+  h.events.emit('x32',{data:JSON.stringify({mixSource:'x32',status:{state},buses:[],levels:{},unavailableBuses:[5]})});
+  a.equal(h.get('.connection-bar').hidden,true,`Live is connected while desk is ${state}`);
+ }
+ h.events.emit('error');a.equal(h.get('.connection-bar').hidden,false);a.equal(h.get('.connection-label').textContent,'Reconnecting…');
+});
+
+test('X32 status metadata and snapshots leave Ableton mix renderer and drag untouched; mode switches render',async()=>{
+ const h=shellHarness();await flush();h.hooks.acceptMix(returns);h.pending.shift()({...h.full,mixSource:'ableton'});await flush();
+ h.events.emit('open');
+ const emit=(mixSource,state,extra={})=>h.events.emit('x32',{data:JSON.stringify({mixSource,status:{state},buses:[],levels:{},...extra})});
+ emit('ableton','connected'); // Initial source transition may render.
+ const before={...h.counters};
+ emit('ableton','lost');emit('ableton','connected',{sources:[{id:'ch/01',name:'Renamed',color:2}]});emit('ableton','connected',{buses:[{bus:5}]});
+ a.deepEqual(h.counters,before);
+ emit('x32','connected');a.equal(h.counters.render,before.render+1);
+ emit('ableton','connected');a.equal(h.counters.render,before.render+2);
+ const after={...h.counters};emit('ableton','searching');a.deepEqual(h.counters,after);
+});

@@ -163,3 +163,42 @@ Timing comes from the device's own regular track, even when it is moved. On a re
 In Settings or Admin, choose **Build timing clips**, confirm, and confirm again if Live is playing. The builder fills only empty slots, using the longest loop in each row across the other tracks. MIDI and warped audio count; unwarped audio does not. Existing clips are never changed. Delete a timing clip in Live and build again to regenerate it. Rows with no usable source are skipped. Counts appear only from actual timing-track clips. Scene follow actions launch the corresponding timing clip; clip follow actions are not copied.
 
 The build alternates with normal scene and timing updates in separate bounded Task ticks and reports progress and created/skipped totals. Names use ⏱ and bar counts rounded to at most two decimal places. A name that cannot be confirmed is reported as a warning; the build continues. A structure change or device removal stops it; clips already created remain. The build does not group undo or hold an undo step open. To undo a build, delete its generated clips in Live (they are all named ⏱); if the result reports name warnings, identify those clips in Live too. Build always skips existing clips. Scene follow actions and performance on a real large set require a Live check.
+
+### X32 in-ear mixes
+
+Connect the X32 Ethernet port to the gig router and join the laptop and phones to
+that router's Wi-Fi. No internet or app installation is needed. In **Admin → Mix
+source and X32**, select **X32**. The server discovers the desk automatically;
+if discovery fails, enter the desk's IPv4 address in **X32 IP override**. Clear it
+to return to discovery. The last connected IP is shown as a hint. Status shows
+searching, connected or lost. After a loss the faders stay disabled until fresh
+desk values arrive; reconnecting never recalls or pushes a saved mix.
+
+Assign members their X32 buses in Admin and save members. Linked pairs appear
+as one choice (for example 5/6). A warning identifies buses routed to Main LR:
+choose monitor buses carefully. The first selected bus is the member's own mix.
+The mix page puts that bus first, with its sticky master on the left. Swipe
+sideways to browse, slide vertically to move a fader, and use the existing Lock
+button to protect levels. Taps never set a level. Hide moves a strip to the end;
+Show restores it. Unnamed sources start hidden. Lists follow the member and bus;
+Admin can edit them under **Member's hidden strips**. Choose a name to save a
+personal list. Switch back to **Ableton returns** for the existing Live mixes.
+
+For a stable laptop address, use **AirPort Utility → select the base station →
+Edit → Network → DHCP Reservations → +**. Reserve an unused LAN address for the
+laptop's Wi-Fi MAC address (use a stable/private address setting on that laptop),
+then reconnect/renew its DHCP lease and copy the updated panel address. Keep the
+X32 on the same subnet; its manual IP override is the discovery fallback.
+
+### Personal links and optional password
+
+Admin lists a personal link for each saved member, with a Copy link button. Share
+that link using the laptop's LAN address and port, for example
+`http://192.168.1.10:8765/keith-ray`. It selects the name for 24 hours; **Log out**
+clears it. Renaming a member changes their link. Members can open each other's
+links: these are convenient identity selectors on the band's trusted network.
+
+In laptop Settings, **Allow phones without a password** must be on to allow LAN
+access with a blank band password. With a blank password and this switch on,
+**the router's Wi-Fi password is the only gate**. With the switch off, blank
+passwords refuse LAN access. A configured band password uses HTTP Basic auth.
