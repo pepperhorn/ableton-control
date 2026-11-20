@@ -140,6 +140,8 @@ bridge.addressChanged = address;
 const config = loadConfig();
 const x32 = createX32({socket:x32Socket,host:config.x32Host || null});
 const app = createApp({bridge,x32,config,saveConfig});
+// Bind can fail before the client starts listening for socket errors.
+x32Socket.on('error',error => max.post('Setlist Touch X32 UDP: ' + error.message));
 x32Socket.bind(0,() => x32.start());
 app.listenWithFallback(app.getConfig().port).then(port => {
   address(port);
