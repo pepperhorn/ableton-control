@@ -7,7 +7,7 @@
 - **PR:** (opened by implementer)
 - **Base commit:** e0df6a8d3cb81793bc6ad9496f2f40586e411d05 (includes merged Tasks 1–3: PRs #12, #13, #14)
 - **Port (if running a server):** 5354
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 Implement plan Task 4, which wires the merged X32 client into the server:
