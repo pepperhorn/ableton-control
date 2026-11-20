@@ -11,7 +11,7 @@ Next ID: 0016
 
 | K | Title | Status | Waiting on | Owner (provider/model) | Branch | PR | Worktree | T3 task/thread | Spec | Plan | Latest handoff | Updated |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 0015-t1 | X32 OSC client and fake desk | in-review | review 0015-t1-review-r1 | codex/gpt-6.1-sol | orch/0015-t1-x32-client | https://github.com/pepperhorn/ableton-control/pull/12 | /home/shaun/.t3/worktrees/m4l-control/t3-22cae3b8-50cbef180f1f5202 | thread:delegated-task:command%3Amcp%3A10f8f373-2001-4e17-beff-46f7a8a8d6c6%3Adelegate-task%3A0015-t1-impl-r1 | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t1-x32-client--lead-to-codex.md | 2026-11-20 |
+| 0015-t1 | X32 OSC client and fake desk | changes-requested | child 0015-t1 r2 | codex/gpt-6.1-sol | orch/0015-t1-x32-client | https://github.com/pepperhorn/ableton-control/pull/12 | /home/shaun/.t3/worktrees/m4l-control/t3-22cae3b8-50cbef180f1f5202 | thread:delegated-task:command%3Amcp%3A10f8f373-2001-4e17-beff-46f7a8a8d6c6%3Adelegate-task%3A0015-t1-impl-r1 | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t1-x32-client--lead-to-codex.md | 2026-11-20 |
 | 0015-t2 | Scene window, Monitor launch, scene bar | in-review | review 0015-t2-review-r1 | codex/gpt-6.1-sol | orch/0015-t2-scene-window | https://github.com/pepperhorn/ableton-control/pull/13 | /home/shaun/.t3/worktrees/m4l-control/t3-e090eac8-aab883a6930b4a70 | thread:delegated-task:command%3Amcp%3A10f8f373-2001-4e17-beff-46f7a8a8d6c6%3Adelegate-task%3A0015-t2-impl-r1 | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t2-scene-window--lead-to-codex.md | 2026-11-20 |
 | 0015-t3 | Identity, personal links, optional password | planned | deps: t2 merges | codex/gpt-6.1-sol | orch/0015-t3-identity | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | — | 2026-11-20 |
 | 0015-t4 | X32 in the server | planned | deps: t1+t3 merge | codex/gpt-6.1-sol | orch/0015-t4-x32-server | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | — | 2026-11-20 |
@@ -42,12 +42,14 @@ Next ID: 0016
 | S | Kind | Suggestion | Evidence | Effort (S/M/L) | Value | Source | Status |
 |---|---|---|---|---|---|---|---|
 | S1 | risk | Run the outstanding Live/Windows checks (0005, 0006, 0011, 0013, 0014) on a scratch set before the next gig | Done-table notes; nothing verified in Live yet | S | High | lead | new |
+| S3 | risk | Confirm on the real X32 whether it echoes a write back to the writing client, and the idle /xremote behaviour | PR #12 r1 review, x32.js:120,161 | S | High | Opus 0015-t1 r1 | new |
 | S2 | improvement | Plainer startup note instead of raw errno text (`listen EACCES…`) | PR #10 r3 review | S | Low | Opus r3 | new |
 
 Last health scan: never
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-11-20 0015-t1 in-review→changes-requested — Opus r1 on 6513578: idle desk drops to lost every 20 s (blocker); own writes rely on desk echo; buslink change mid-load; resumed Sol
 2026-11-20 0015-t2 dispatched→in-review — PR #13 head 5370bc2, 319 tests; Opus review r1
 2026-11-20 0015-t1 dispatched→in-review — PR #12 head 6513578, 329 tests; Opus review r1
 2026-11-20 0015 →planned; t1,t2 dispatched — user approved X32 design ("Go. Build it"); plan docs/plans/0015-x32-mixes.md, 5 tasks in 4 waves
