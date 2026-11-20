@@ -596,7 +596,7 @@ test('laptop logout clears a member st_id while retaining loopback admin authori
 });
 
 test('slug failure after Live adds player reports link error and preserves existing config',async t=>{
- const members=[{id:'one',name:' Keith ',pages:['monitor'],mixes:[]},{id:'two',name:'Keith',pages:['monitor'],mixes:[]}];
+ const members=[{id:'one',name:' Keith ',pages:['monitor'],mixes:[],buses:[],hidden:{}},{id:'two',name:'Keith',pages:['monitor'],mixes:[],buses:[],hidden:{}}];
  const h=await identitySetup(t,{members});h.laptop();let added=0;
  h.bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[]}});
  h.bridge.addPlayer=async()=>{added++;return {ok:true,returnName:'D-Keith'};};

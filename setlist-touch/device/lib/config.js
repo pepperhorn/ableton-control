@@ -1,11 +1,13 @@
 'use strict';
 const fs = require('fs'), os = require('os'), path = require('path');
 const {normalizeAccess, validMembers} = require('./access');
-const DEFAULT_CONFIG = Object.freeze({port:8765, username:'band', password:'', allowOpenLan:false, sceneBefore:2, sceneAfter:2});
+const DEFAULT_CONFIG = Object.freeze({port:8765, username:'band', password:'', allowOpenLan:false, sceneBefore:2, sceneAfter:2, mixSource:'x32', x32Host:null});
 function configPath() { return path.join(os.homedir(), 'Documents', 'SetlistTouch', 'config.json'); }
 function sceneCount(value) { return Number.isInteger(value) && value >= 0 && value <= 8 ? value : 2; }
+function validHost(host) { return host === null || typeof host === 'string' && /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(host) && host.split('.').every(n => Number(n) <= 255); }
 function validConfig(cfg) {
   return cfg && Number.isInteger(cfg.port) && cfg.port > 0 && cfg.port <= 65535 &&
+    (cfg.mixSource === undefined || ['x32','ableton'].includes(cfg.mixSource)) && (cfg.x32Host === undefined || validHost(cfg.x32Host)) &&
     typeof cfg.username === 'string' && cfg.username.length > 0 && !/[:\r\n]/.test(cfg.username) && typeof cfg.password === 'string' && (cfg.allowOpenLan === undefined || typeof cfg.allowOpenLan === 'boolean') && ['sceneBefore','sceneAfter'].every(k => cfg[k] === undefined || (Number.isInteger(cfg[k]) && cfg[k] >= 0 && cfg[k] <= 8));
 }
 function loadConfig(file = configPath()) {
@@ -13,7 +15,7 @@ function loadConfig(file = configPath()) {
   try {
     original = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (!original || typeof original !== 'object' || Array.isArray(original)) throw new Error('Invalid config');
-    raw = {...DEFAULT_CONFIG, ...original, sceneBefore:sceneCount(original.sceneBefore), sceneAfter:sceneCount(original.sceneAfter)};
+    raw = {...DEFAULT_CONFIG, ...original, mixSource:original.mixSource || ((Array.isArray(original.members) ? original.members : []).some(m => m && Array.isArray(m.mixes) && m.mixes.length) ? 'ableton' : 'x32'), sceneBefore:sceneCount(original.sceneBefore), sceneAfter:sceneCount(original.sceneAfter)};
     if (!validConfig(raw)) throw new Error('Invalid base config');
   } catch (error) {
     missing = error.code === 'ENOENT'; damaged = !missing;
@@ -60,4 +62,4 @@ function writeConfig(value, file) {
   fs.writeFileSync(file + '.tmp', JSON.stringify(value, null, 2) + '\n', {mode:0o600});
   fs.renameSync(file + '.tmp', file);
 }
-module.exports = {DEFAULT_CONFIG, configPath, loadConfig, saveConfig, validConfig, sceneCount};
+module.exports = {DEFAULT_CONFIG, configPath, loadConfig, saveConfig, validConfig, sceneCount, validHost};

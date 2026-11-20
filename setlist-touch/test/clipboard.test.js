@@ -48,7 +48,7 @@ function server({copy = async () => {}, failed = false} = {}) {
   name === './lib/app' ? {createApp:options => {
    bridge = options.bridge;
    return {listenWithFallback:() => new Promise((resolve,reject) => {start = resolve; fail = reject;}),getPortNote:() => 'Port 8765 was busy — now on 8766',getConfig:() => ({port:8765})};
-  }} : name === './lib/config' ? {loadConfig:() => ({})} : require(name);
+  }} : name === './lib/x32' ? {createX32:() => ({start(){},stop(){}})} : name === 'dgram' ? {createSocket:() => ({bind(){},close(){}})} : name === './lib/config' ? {loadConfig:() => ({})} : require(name);
  vm.runInNewContext(fs.readFileSync(path.join(device,'setlist-server.js'),'utf8'), {
   require:req,process:{on:() => {}},
   setTimeout:(fn,ms) => {const id = ++nextTimer; timers.set(id,{fn,ms}); return id;},clearTimeout:id => timers.delete(id)

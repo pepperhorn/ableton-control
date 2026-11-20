@@ -7,7 +7,7 @@ const {progress} = require('./progress');
 const {parseMix} = require('./parse-mix');
 const {parseTransport, validCommand} = require('./transport');
 const {authorize, isTrustedLoopback} = require('./auth');
-const {loadConfig, saveConfig: persist, validConfig, sceneCount} = require('./config');
+const {loadConfig, saveConfig: persist, validConfig, sceneCount, validHost} = require('./config');
 // Bound each attempt even when a shadow server hangs or streams forever.
 function probeAddress(port, nonce, hostname) {
   return new Promise(resolve => {
@@ -55,7 +55,7 @@ function failureSummary(failures) {
   }
   return runs.map(run => (run.first === run.last ? 'Port ' + run.first : 'Ports ' + run.first + '–' + run.last) + ': ' + run.reason).join('; ');
 }
-function createApp({bridge, config = loadConfig(), saveConfig = persist,
+function createApp({bridge, x32 = null, config = loadConfig(), saveConfig = persist,
   probe = probeLoopback, webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress, now = Date.now}) {
   const configWarning = config.configWarning;
   const nonce = randomBytes(24).toString('hex');
@@ -105,7 +105,15 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   bridge.on('transport', onTransport);
   const sends = new Map(), levelUpdates = new Map();
   const clients = new Set(), servers = new Set(), sockets = new Set();
-  const send = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  const send = (res, event, data) => { if (res.writableLength > 1024*256) res.destroy(); else res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
+  const xm = require('./x32-mix').createX32Mix({x32,config:()=>cfg,send,now});
+  async function rememberX32Host(status) {
+    if (closed || changing || configWarning || status.state !== 'connected' || !validHost(status.host) || !status.host || cfg.x32LastHost === status.host) return;
+    changing = true;
+    try { const next = {...cfg,x32LastHost:status.host}; await saveConfig(next); cfg = next; } catch (_) { /* Discovery must survive an unwritable config. */ }
+    finally { changing = false; }
+  }
+  if (x32) x32.on('status',rememberX32Host);
   function broadcast(event, data) { for (const res of clients) { if (res.writableLength > 1024 * 256) res.destroy(); else send(res, event, data); } }
   function onScenes(raw) {
     const next = parseSet(raw), serialized = JSON.stringify(next);
@@ -219,6 +227,55 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         res.setHeader('Set-Cookie',[...(res.getHeader('Set-Cookie') || []),value]);
       };
       const choose = member => cookie(memberToken(member,now()),identity.kind === 'admin' ? 'st_who' : 'st_id');
+      const memberId = new URL(req.url,'http://localhost').searchParams.get('member');
+      if (route === '/api/x32' && req.method === 'GET') return json(res,xm.view(identity,memberId));
+      if (route === '/api/x32-send' && req.method === 'POST') {
+        let v; try { v = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+        if (!v || !Number.isInteger(v.bus) || v.bus < 1 || v.bus > 16 || typeof v.source !== 'string' || !Number.isFinite(v.value) || v.value < 0 || v.value > 1) return reply(res,400,'Invalid send');
+        if (identity.kind === 'none' || identity.kind === 'member' && !(identity.member.buses || []).length) return reply(res,403,'Bus not allowed');
+        if (!xm.ready()) return reply(res,409,'X32 is not ready');
+        if (!xm.allowed(identity,v.bus)) return reply(res,403,'Bus not allowed');
+        const bus = xm.busFor(v.bus), snapshot = xm.snapshot();
+        if (!snapshot.buses.some(b => b.bus === bus)) return reply(res,409,'Bus '+v.bus+' not available');
+        if (v.source !== 'master' && !snapshot.sources.some(s => s.id === v.source)) return reply(res,400,'Invalid source');
+        xm.write({...v,bus},identityOf); return reply(res,204);
+      }
+      if (route === '/api/x32-hidden' && req.method === 'PUT') {
+        let v; try { v = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+        if (!v || !Number.isInteger(v.bus) || v.bus < 1 || v.bus > 16 || !Array.isArray(v.hidden)) return reply(res,400,'Invalid hidden list');
+        if (v.member !== undefined && identity.kind !== 'admin') return reply(res,403,'Admin required');
+        const member = identity.kind === 'admin' && v.member !== undefined ? cfg.members.find(m => m.id === v.member) : identity.member;
+        if (!member || !xm.allowed(identity,v.bus) || !(member.buses || []).some(n => xm.busFor(n) === xm.busFor(v.bus))) return reply(res,403,'Bus not allowed');
+        const snapshot = xm.snapshot();
+        if (!snapshot || !snapshot.buses.some(b => b.bus === xm.busFor(v.bus))) return reply(res,409,'Bus not available');
+        if (v.hidden.some(id => !snapshot.sources.some(s => s.id === id))) return reply(res,400,'Invalid source');
+        if (changing) return reply(res,409,'Settings are being changed');
+        changing = true;
+        try {
+          const bus = xm.busFor(v.bus), hidden = {...member.hidden};
+          for (const n of Object.keys(hidden)) if (xm.busFor(Number(n)) === bus) delete hidden[n];
+          hidden[bus] = [...new Set(v.hidden)];
+          const next = {...cfg,members:cfg.members.map(m => m.id === member.id ? {...m,hidden} : m)};
+          await saveConfig(next); cfg = next; xm.refresh(); return reply(res,204);
+        } finally { changing = false; }
+      }
+      if (route === '/api/x32-settings' && req.method === 'GET') {
+        if (identity.kind !== 'admin') return reply(res,403,'Admin required');
+        return json(res,{mixSource:cfg.mixSource,host:cfg.x32Host,lastHost:cfg.x32LastHost || null});
+      }
+      if (route === '/api/x32-settings' && req.method === 'PUT') {
+        if (identity.kind !== 'admin') return reply(res,403,'Admin required');
+        let v; try { v = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+        if (!v || typeof v !== 'object' || Array.isArray(v) || v.mixSource !== undefined && !['x32','ableton'].includes(v.mixSource) || v.host !== undefined && !validHost(v.host)) return reply(res,400,'Invalid X32 settings');
+        if (changing) return reply(res,409,'Settings are being changed');
+        changing = true;
+        try {
+          const next = {...cfg,mixSource:v.mixSource === undefined ? cfg.mixSource : v.mixSource,x32Host:v.host === undefined ? cfg.x32Host : v.host};
+          await saveConfig(next); const hostChanged = cfg.x32Host !== next.x32Host; cfg = next;
+          xm.refresh(); if (hostChanged && x32) x32.setHost(cfg.x32Host);
+          broadcast('access',null); return json(res,{mixSource:cfg.mixSource,host:cfg.x32Host});
+        } finally { changing = false; }
+      }
       if (route === '/api/me' && req.method === 'GET') return json(res, {...meFor(identity,cfg),sceneWindow:{before:cfg.sceneBefore,after:cfg.sceneAfter}});
       if (route === '/api/forget' && req.method === 'POST') {
         if (identify({cookie:req.headers.cookie,now:now()},cfg).kind !== 'admin') cookie(null);
@@ -324,7 +381,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
           if (value.members.some(m => !m || typeof m.name !== 'string')) return reply(res,400,'Invalid members');
           const members = value.members.map(m => {
             const defaults = !m.id ? newMember(m.name,mix.returns.map(r => r.name)) : {};
-            return {id:m.id || defaults.id,name:m.name,pages:m.pages === undefined ? defaults.pages : m.pages,mixes:m.mixes === undefined ? defaults.mixes : m.mixes};
+            const old = cfg.members.find(member => member.id === m.id) || {};
+            return {id:m.id || defaults.id,name:m.name,pages:m.pages === undefined ? defaults.pages : m.pages,mixes:m.mixes === undefined ? defaults.mixes : m.mixes,buses:m.buses === undefined ? old.buses || [] : m.buses,hidden:m.hidden === undefined ? old.hidden || {} : m.hidden};
           });
           if (!validMembers(members)) return reply(res,400,'Invalid members');
           if (!validSlugs(members)) return reply(res,400,"That name can't be used for a link");
@@ -332,7 +390,9 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
           changing = true;
           try {
             const next = {...cfg,members,accessEnabled:cfg.accessEnabled || (cfg.members.length === 0 && members.length > 0)};
-            await saveConfig(next); cfg = next; broadcast('access',null); return json(res,meFor(identityOf(),cfg));
+            await saveConfig(next); cfg = next; xm.refresh(); broadcast('access',null);
+            const warned = (xm.snapshot() || {buses:[]}).buses.find(b => b.toMain && members.some(m => m.buses.some(n => xm.busFor(n) === b.bus)));
+            return json(res,{...meFor(identityOf(),cfg),...(warned ? {warning:'Bus '+warned.bus+' is routed to Main LR'} : {})});
           } finally { changing = false; }
         }
       }
@@ -344,6 +404,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         send(res, 'play', play); if (pos) send(res, 'pos', pos);
         if (indexing) send(res, 'progress', indexing);
         if (timing) send(res,'timing',timing);
+        xm.connect(res,identityOf,memberId);
         res.on('close', () => clients.delete(res)); return;
       }
       if (route === '/api/transport' && req.method === 'POST') {
@@ -494,7 +555,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     getPortNote() { return portNote; },
     getConfig() { return {...cfg}; },
     async close() {
-      if (closed) return; closed = true; clearInterval(ping); clearTimeout(posTimer); clearTimeout(transportTimer);
+      if (closed) return; closed = true; xm.close(); if (x32) x32.removeListener('status',rememberX32Host); clearInterval(ping); clearTimeout(posTimer); clearTimeout(transportTimer);
       playerRemoved(); bridge.removeListener('playerRemoved',playerRemoved);
       bridge.removeListener('effectLevel',onEffectLevel);
       bridge.removeListener('transport', onTransport);
