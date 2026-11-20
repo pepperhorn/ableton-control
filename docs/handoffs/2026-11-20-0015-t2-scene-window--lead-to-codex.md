@@ -7,7 +7,7 @@
 - **PR:** (opened by implementer)
 - **Base commit:** 57df4758d8d47c80d3385da4657ada04960f2548
 - **Port (if running a server):** 5352
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 Add the scene window (configurable before/after, default 2/2) in large form on Monitor (touch lock on by default; launch only for members with the scenes permission) and as a hideable slim bar on the mix page, per plan Task 2. Done means every test listed in the plan task passes, the full suite passes, and a draft PR is open.
