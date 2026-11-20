@@ -2,31 +2,44 @@
 
 > Single writer: the **lead**, on the main branch only. Implementers report status through their return handoff.
 > Status: proposed · specced · planned · dispatched · in-review · changes-requested · ready · merged · closed · blocked · parked
+> Waiting on: `child <taskId>` · `review <taskId>` · `ci` · `human: <why>` · `lead: <next action>`. Set it on every status change. A row needs the lead when it starts with `lead`, or when it's empty and Status is dispatched, in-review, changes-requested, ready, or merged. The lead's Stop hook won't let the lead end its turn while any row needs it.
+> Type: normal items have a spec and plan. Quick items have the title prefix `[quick]` (no spec or plan, a short handoff). PRs adopted by `orch-sweep` have the prefix `[pr]`.
 
 Next ID: 0015
 
 ## Active
 
-| K | Title | Status | Owner (provider/model) | Branch | PR | Worktree | T3 task/thread | Spec | Plan | Latest handoff | Updated |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 0014 | Click device address to copy it | https://github.com/pepperhorn/ableton-control/pull/11 | 2026-11-04 (squash of reviewed bca8537) | Opus approved r1; 307 tests on main. Nits: test that the address box only takes prepend set; no feedback if URL changes mid-copy. Verify on Windows: click copies, confirmation reverts. |
-| 0013 | Port already in use + Open button | https://github.com/pepperhorn/ableton-control/pull/10 | 2026-11-04 (28fe431, squash of reviewed 4abd57a) | Opus approved r3; 298 tests on main. Follow-ups: slow ::1 refusal adds ~1 s per start/settings change on Windows; overloaded [::1] listener could read as absent; startup note shows raw errno text. Verify on Windows: normal start on configured port (~1 s), busy port falls forward with panel note, Open shows and fronts the window, firewall prompt. |
-| 0009 | Band members and access | https://github.com/pepperhorn/ableton-control/pull/7 | 2026-10-31 (squash of reviewed da181fd) | Opus approved r3. Follow-ups → 0010. Verify: jweb stays full admin on Windows, real phones keep their name after a browser restart, Node 16 runtime. |
-| 0008 | Monitor tab | https://github.com/pepperhorn/ableton-control/pull/6 | 2026-10-31 (squash of reviewed f24c47e + docs-only main merge fddc1c9) | Opus approved r2. Verify in Live: phone on mic stand, flash vs real queued scene incl. pale colours, blank name time during re-index, possible brief wrong-name flash on scene insert. |
-| 0007 | 0005 review follow-ups | https://github.com/pepperhorn/ableton-control/pull/5 | 2026-10-29 (squash of reviewed 8de8c00) | Opus r1 approve + lead fixes (stale Dict on ready, return-list fail-closed); Sol r2 approve. Verify in Live: status text, device delete time, fader echo after rename. |
-| 0005 | Large-set performance + indexing progress | https://github.com/pepperhorn/ableton-control/pull/4 | 2026-10-29 (d57b0a7, squash of reviewed 3cf9f49) | Opus approved r1. Non-blocking follow-ups → 0007. Verify in Live: 683-scene index time, no dropouts, status text quotes, rename ~0.5 s. |
-| 0003 | Transport header | https://github.com/pepperhorn/ableton-control/pull/3 | 2026-10-29 (squash of reviewed bfd084a) | Opus approved r2. Optional: extra lost-pointer safeguard (transport-render.js:66). Verify in Live: get_current_beats_song_time format, play/stop idempotence, Arrangement Record toggle. |
-| 0002 | In-ear mix pages (phase 2) | https://github.com/pepperhorn/ableton-control/pull/2 | 2026-10-29 (22b634a, squash of reviewed cd24b83) | Opus approved r2. Optional nits: late mid-drag echo or cancel() clears release hold early. Needs user verification in Live 12/Windows: routing JSON and Main/Master name, echo latency vs 1 s hold, send labels, touch. |
-| 0001 | Setlist Touch (phase 1) | https://github.com/pepperhorn/ableton-control/pull/1 | 2026-10-29 (e2bc976, squash of reviewed a3f2853) | Opus approved r2. Minor follow-ups folded into 0002: Space blocked in settings inputs; extra LiveAPI reads per position update; empty set shows Reconnecting. Needs user verification in Live on Windows (touch in jweb, END-row empty name, window open/resize). |
-| 0012 | Review follow-ups: 0011 (stale form can link an alias without naming it first; case-only name difference creates a near-duplicate return); 0006 (Build before track found shows wrong message, lom.js:347; build tick reads track list twice, lom.js:372) | proposed | — | — | — | — | — | — | — | — | 2026-11-02 |
-| 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
+| K | Title | Status | Waiting on | Owner (provider/model) | Branch | PR | Worktree | T3 task/thread | Spec | Plan | Latest handoff | Updated |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0012 | Review follow-ups: 0011 (stale form can link an alias without naming it first; case-only name difference creates a near-duplicate return); 0006 (Build before track found shows wrong message, lom.js:347; build tick reads track list twice, lom.js:372) | proposed | human: not prioritised yet | — | — | — | — | — | — | — | — | 2026-11-02 |
+| 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | human: on hold (phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
 
 ## Done / closed
 
 | K | Title | PR | Merged | Notes |
 |---|---|---|---|---|
-| 0006 | Timing clips on the device track | https://github.com/pepperhorn/ableton-control/pull/9 | 2026-11-03 (squash of reviewed 0b68a46) | Opus approved r2; 276 tests on main. Verify in Live: own-track binding, create_clip, ⏱ name, build time on 683 scenes, generated clip launches by tap and scene follow action. |
+| 0014 | Click device address to copy it | https://github.com/pepperhorn/ableton-control/pull/11 | 2026-11-04 (squash of reviewed bca8537) | Opus approved r1; 307 tests on main. Nits: test that the address box only takes prepend set; no feedback if URL changes mid-copy. Verify on Windows: click copies, confirmation reverts. |
+| 0013 | Port already in use + Open button | https://github.com/pepperhorn/ableton-control/pull/10 | 2026-11-04 (28fe431, squash of reviewed 4abd57a) | Opus approved r3; 298 tests on main. Follow-ups: slow ::1 refusal adds ~1 s per start/settings change on Windows; overloaded [::1] listener could read as absent; startup note shows raw errno text. Verify on Windows: normal start on configured port (~1 s), busy port falls forward with panel note, Open shows and fronts the window, firewall prompt. |
 | 0011 | Add player and effects (includes 0010) | https://github.com/pepperhorn/ableton-control/pull/8 | 2026-11-02 (squash of reviewed a728ef0) | Opus approved r3; 244 tests on main. Live API untested: run the return handoff's Live-only checks on a scratch set before the show set. |
+| 0009 | Band members and access | https://github.com/pepperhorn/ableton-control/pull/7 | 2026-10-31 (squash of reviewed da181fd) | Opus approved r3. Follow-ups → 0010. Verify: jweb stays full admin on Windows, real phones keep their name after a browser restart, Node 16 runtime. |
+| 0008 | Monitor tab | https://github.com/pepperhorn/ableton-control/pull/6 | 2026-10-31 (squash of reviewed f24c47e + docs-only main merge fddc1c9) | Opus approved r2. Verify in Live: phone on mic stand, flash vs real queued scene incl. pale colours, blank name time during re-index, possible brief wrong-name flash on scene insert. |
+| 0007 | 0005 review follow-ups | https://github.com/pepperhorn/ableton-control/pull/5 | 2026-10-29 (squash of reviewed 8de8c00) | Opus r1 approve + lead fixes (stale Dict on ready, return-list fail-closed); Sol r2 approve. Verify in Live: status text, device delete time, fader echo after rename. |
+| 0006 | Timing clips on the device track | https://github.com/pepperhorn/ableton-control/pull/9 | 2026-11-03 (squash of reviewed 0b68a46) | Opus approved r2; 276 tests on main. Verify in Live: own-track binding, create_clip, ⏱ name, build time on 683 scenes, generated clip launches by tap and scene follow action. |
+| 0005 | Large-set performance + indexing progress | https://github.com/pepperhorn/ableton-control/pull/4 | 2026-10-29 (d57b0a7, squash of reviewed 3cf9f49) | Opus approved r1. Non-blocking follow-ups → 0007. Verify in Live: 683-scene index time, no dropouts, status text quotes, rename ~0.5 s. |
+| 0003 | Transport header | https://github.com/pepperhorn/ableton-control/pull/3 | 2026-10-29 (squash of reviewed bfd084a) | Opus approved r2. Optional: extra lost-pointer safeguard (transport-render.js:66). Verify in Live: get_current_beats_song_time format, play/stop idempotence, Arrangement Record toggle. |
+| 0002 | In-ear mix pages (phase 2) | https://github.com/pepperhorn/ableton-control/pull/2 | 2026-10-29 (22b634a, squash of reviewed cd24b83) | Opus approved r2. Optional nits: late mid-drag echo or cancel() clears release hold early. Needs user verification in Live 12/Windows: routing JSON and Main/Master name, echo latency vs 1 s hold, send labels, touch. |
+| 0001 | Setlist Touch (phase 1) | https://github.com/pepperhorn/ableton-control/pull/1 | 2026-10-29 (e2bc976, squash of reviewed a3f2853) | Opus approved r2. Minor follow-ups folded into 0002: Space blocked in settings inputs; extra LiveAPI reads per position update; empty set shows Reconnecting. Needs user verification in Live on Windows (touch in jweb, END-row empty name, window open/resize). |
+
+## Suggestions
+
+> Lead-curated ideas: next steps, improvements, code efficiencies, stack changes, risks. Each needs evidence (file:line, a measurement, or a link). Status: `new` · `accepted → NNNN` · `declined: <why>` · `done`. Keep declined rows so they aren't suggested again. A PR mentioned here isn't tracked: only the PR column of Active or Done rows counts.
+
+| S | Kind | Suggestion | Evidence | Effort (S/M/L) | Value | Source | Status |
+|---|---|---|---|---|---|---|---|
+| S1 | risk | Run the outstanding Live/Windows checks (0005, 0006, 0011, 0013, 0014) on a scratch set before the next gig | Done-table notes; nothing verified in Live yet | S | High | lead | new |
+| S2 | improvement | Plainer startup note instead of raw errno text (`listen EACCES…`) | PR #10 r3 review | S | Low | Opus r3 | new |
+
+Last health scan: never
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
