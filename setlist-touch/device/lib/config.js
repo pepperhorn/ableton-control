@@ -1,18 +1,19 @@
 'use strict';
 const fs = require('fs'), os = require('os'), path = require('path');
 const {normalizeAccess, validMembers} = require('./access');
-const DEFAULT_CONFIG = Object.freeze({port:8765, username:'band', password:''});
+const DEFAULT_CONFIG = Object.freeze({port:8765, username:'band', password:'', sceneBefore:2, sceneAfter:2});
 function configPath() { return path.join(os.homedir(), 'Documents', 'SetlistTouch', 'config.json'); }
+function sceneCount(value) { return Number.isInteger(value) && value >= 0 && value <= 8 ? value : 2; }
 function validConfig(cfg) {
   return cfg && Number.isInteger(cfg.port) && cfg.port > 0 && cfg.port <= 65535 &&
-    typeof cfg.username === 'string' && cfg.username.length > 0 && !/[:\r\n]/.test(cfg.username) && typeof cfg.password === 'string';
+    typeof cfg.username === 'string' && cfg.username.length > 0 && !/[:\r\n]/.test(cfg.username) && typeof cfg.password === 'string' && ['sceneBefore','sceneAfter'].every(k => cfg[k] === undefined || (Number.isInteger(cfg[k]) && cfg[k] >= 0 && cfg[k] <= 8));
 }
 function loadConfig(file = configPath()) {
   let raw, original, damaged = false, missing = false;
   try {
     original = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (!original || typeof original !== 'object' || Array.isArray(original)) throw new Error('Invalid config');
-    raw = {...DEFAULT_CONFIG, ...original};
+    raw = {...DEFAULT_CONFIG, ...original, sceneBefore:sceneCount(original.sceneBefore), sceneAfter:sceneCount(original.sceneAfter)};
     if (!validConfig(raw)) throw new Error('Invalid base config');
   } catch (error) {
     missing = error.code === 'ENOENT'; damaged = !missing;
@@ -59,4 +60,4 @@ function writeConfig(value, file) {
   fs.writeFileSync(file + '.tmp', JSON.stringify(value, null, 2) + '\n', {mode:0o600});
   fs.renameSync(file + '.tmp', file);
 }
-module.exports = {DEFAULT_CONFIG, configPath, loadConfig, saveConfig, validConfig};
+module.exports = {DEFAULT_CONFIG, configPath, loadConfig, saveConfig, validConfig, sceneCount};

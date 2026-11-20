@@ -7,7 +7,7 @@ const {progress} = require('./progress');
 const {parseMix} = require('./parse-mix');
 const {parseTransport, validCommand} = require('./transport');
 const {authorize, isTrustedLoopback} = require('./auth');
-const {loadConfig, saveConfig: persist, validConfig} = require('./config');
+const {loadConfig, saveConfig: persist, validConfig, sceneCount} = require('./config');
 // Bound each attempt even when a shadow server hangs or streams forever.
 function probeAddress(port, nonce, hostname) {
   return new Promise(resolve => {
@@ -60,7 +60,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
   const configWarning = config.configWarning;
   const nonce = randomBytes(24).toString('hex');
   let portNote = '';
-  let cfg = normalizeAccess(config), parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
+  let cfg = {...normalizeAccess(config),sceneBefore:sceneCount(config.sceneBefore),sceneAfter:sceneCount(config.sceneAfter)}, parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
   let building = false, timing = null;
   function onTimingProgress(value) { if (building && value && Number.isInteger(value.done) && Number.isInteger(value.total) && value.done >= 0 && value.total >= value.done) { timing = {...value,running:true}; broadcast("timing",timing); } }
@@ -194,7 +194,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     res.writeHead(status, {'Content-Type':type, 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'}); res.end(body);
   }
   function json(res, data) { reply(res, 200, JSON.stringify(data), 'application/json'); }
-  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password, ...(configWarning ? {configWarning} : {}), ...(portNote ? {portNote} : {}), ...(cfg.accessEnabled || cfg.adminPassword || cfg.members.length ? {hasAdminPassword:!!cfg.adminPassword,accessEnabled:cfg.accessEnabled} : {})}; }
+  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password, sceneBefore:cfg.sceneBefore,sceneAfter:cfg.sceneAfter, ...(configWarning ? {configWarning} : {}), ...(portNote ? {portNote} : {}), ...(cfg.accessEnabled || cfg.adminPassword || cfg.members.length ? {hasAdminPassword:!!cfg.adminPassword,accessEnabled:cfg.accessEnabled} : {})}; }
   async function body(req) {
     if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) throw new Error('Expected JSON');
     let text = '';
@@ -215,7 +215,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
       const identity = identityOf();
       const route = req.url.split('?')[0];
       const cookie = payload => res.setHeader('Set-Cookie', 'st_id=' + (payload ? sign(payload,cfg.secret) : '') + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + (payload ? 31536000 : 0));
-      if (route === '/api/me' && req.method === 'GET') return json(res, meFor(identity,cfg));
+      if (route === '/api/me' && req.method === 'GET') return json(res, {...meFor(identity,cfg),sceneWindow:{before:cfg.sceneBefore,after:cfg.sceneAfter}});
       if (route === '/api/forget' && req.method === 'POST') { cookie(null); return reply(res,204); }
       if (route === '/api/identify' && req.method === 'POST') {
         let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
@@ -356,6 +356,22 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         if (!target(value)) return reply(res, 409, JSON.stringify({mix}), 'application/json');
         setSend(value, identityOf); return reply(res, 204);
       }
+      if (route === '/api/settings') {
+        if (identity.kind !== 'admin') return reply(res,403,'Admin only');
+        if (req.method === 'GET') return json(res,{sceneBefore:cfg.sceneBefore,sceneAfter:cfg.sceneAfter});
+        if (req.method === 'POST' || req.method === 'PUT') {
+          let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
+          if (!value || !validConfig({...cfg,sceneBefore:value.sceneBefore === undefined ? cfg.sceneBefore : value.sceneBefore,sceneAfter:value.sceneAfter === undefined ? cfg.sceneAfter : value.sceneAfter})) return reply(res,400,'Invalid scene window');
+          if (changing) return reply(res,409,'Settings are being changed');
+          changing = true;
+          try {
+            const next = {...cfg,sceneBefore:value.sceneBefore === undefined ? cfg.sceneBefore : value.sceneBefore,sceneAfter:value.sceneAfter === undefined ? cfg.sceneAfter : value.sceneAfter};
+            await saveConfig(next); cfg = next; broadcast('access',null);
+            return json(res,{sceneBefore:cfg.sceneBefore,sceneAfter:cfg.sceneAfter});
+          } catch (_) { return reply(res,400,'Could not save settings'); }
+          finally { changing = false; }
+        }
+      }
       if (route === '/api/config') {
         if (!isTrustedLoopback(remoteAddress, req.headers.host)) return reply(res, 403, 'Settings are only available on the laptop.');
         if (req.method === 'GET') return json(res, publicConfig());
@@ -364,7 +380,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
           if (!validConfig(value)) return reply(res, 400, 'Invalid port or credentials');
           if (value.password === '') value.password = cfg.password;
           if (value.accessEnabled !== undefined && typeof value.accessEnabled !== 'boolean' || value.adminPassword !== undefined && typeof value.adminPassword !== 'string') return reply(res,400,'Invalid access settings');
-          value = {...cfg, port:value.port,username:value.username,password:value.password,
+          value = {...cfg, sceneBefore:value.sceneBefore === undefined ? cfg.sceneBefore : value.sceneBefore, sceneAfter:value.sceneAfter === undefined ? cfg.sceneAfter : value.sceneAfter, port:value.port,username:value.username,password:value.password,
             adminPassword:value.adminPassword || cfg.adminPassword, accessEnabled:value.accessEnabled === undefined ? cfg.accessEnabled : value.accessEnabled};
           if (changing) return reply(res, 409, 'Settings are being changed');
           changing = true;

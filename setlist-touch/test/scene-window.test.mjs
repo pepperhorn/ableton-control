@@ -1,0 +1,12 @@
+import {test} from 'node:test';
+import a from 'node:assert/strict';
+import {sceneWindow, readSceneBar, saveSceneBar} from '../device/web/js/scene-window.js';
+const rows = Array.from({length:7},(_,i)=>({sceneIndex:i+1,name:i===6?'':`Section ${i}`,isEnd:i===6,color:255,loopBeats:32,beatsPerBar:4}));
+const songs = [{id:0,rows},{id:8,rows:[{sceneIndex:9,name:'Other song'}]}];
+const view = (playing,extra={}) => sceneWindow({songs,play:{playing,playingSongId:0,current:rows[playing-1]},...extra});
+test('window shows 2 before/2 after by default',()=>{const v=view(4);a.deepEqual(v.rows.map(r=>r.index),[2,3,4,5,6]);a.equal(v.currentIndex,4);a.deepEqual(v.rows.map(r=>r.role),['before','before','current','after','after']);});
+test('window clips at song start and end, never shows category or next song',()=>{a.deepEqual(view(1).rows.map(r=>r.index),[1,2,3]);a.deepEqual(view(7).rows.map(r=>r.index),[5,6,7]);a.equal(view(0),null);a.equal(view(-1),null);});
+test('End row counts as a scene',()=>{const r=view(6).rows.at(-1);a.equal(r.index,7);a.equal(r.name,'');});
+test('bars null when no timing clip',()=>{a.equal(sceneWindow({songs:[{id:0,rows:[{sceneIndex:1,name:'No timing'}]}],play:{playing:1,current:{},playingSongId:0}}).rows[0].bars,null);});
+test('progress only matches current with timing; stale current fails closed',()=>{a.equal(view(4,{pos:{scene:3,bar:1,bars:8,fraction:.2}}).rows[2].progress,null);a.deepEqual(view(4,{pos:{scene:4,bar:2,bars:8,fraction:.2}}).rows[2].progress,{bar:2,bars:8,fraction:.2});a.equal(sceneWindow({songs,play:{playing:4,playingSongId:0,current:null}}),null);});
+test('scene bar hidden pref persists and survives storage throwing',()=>{const store={value:null,getItem(){return this.value;},setItem(k,v){a.equal(k,'st.sceneBar');this.value=v;}};a.equal(readSceneBar(store),true);saveSceneBar(store,false);a.equal(readSceneBar(store),false);saveSceneBar(store,true);a.equal(readSceneBar(store),true);const bad={getItem(){throw Error();},setItem(){throw Error();}};a.equal(readSceneBar(bad),true);a.doesNotThrow(()=>saveSceneBar(bad,false));});

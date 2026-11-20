@@ -79,3 +79,25 @@ body[data-page=monitor] .page-switch{margin-right:auto}
 .timing-panel { padding:16px; overflow:auto; flex-shrink:0; }
 .timing-build { font:inherit; padding:12px 18px; border-radius:8px; cursor:pointer; }
 .timing-status { overflow-wrap:anywhere; }
+/* Shared scene window, large on Monitor and compact above the mix. */
+body[data-page=monitor] .lock-toggle{display:block}
+.scene-window{display:flex;flex-direction:column;gap:8px;min-width:0;flex:none}
+.scene-window-row{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 18px;min-height:44px;border:0;border-radius:9px;text-align:left;overflow:hidden;overflow-wrap:anywhere;touch-action:pan-y;user-select:none}
+.scene-window-name,.scene-window-counter{position:relative;z-index:1}
+.scene-window-name{min-width:0}
+.scene-window-counter{flex:none;font-variant-numeric:tabular-nums;font-size:.6em}
+.scene-window-fill{position:absolute;inset:0 auto 0 0;background:#0004;pointer-events:none}
+.scene-window-before{opacity:.5}
+.scene-window-current{outline:3px solid #fff;outline-offset:-3px;font-weight:700}
+.scene-window-large .scene-window-row{font-size:clamp(26px,3.5vw,48px);line-height:1.2;min-height:70px;padding:16px 24px}
+.scene-window-large .scene-window-current{font-size:clamp(36px,5vw,68px);min-height:120px}
+.scene-window-row.is-queued{animation:monitor-pulse 2.4s ease-in-out infinite}
+.scene-bar{flex-direction:row;overflow-x:auto;gap:6px;padding:3px}
+.scene-bar .scene-window-row{font-size:14px;min-width:150px;flex:1;padding:10px;gap:8px}
+.scene-bar .scene-window-counter{font-size:12px}
+.scene-bar-controls{display:flex;justify-content:flex-end;flex:none}
+.scene-bar-toggle{font-size:12px;min-height:44px}
+.admin-scene-settings{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:20px 0}
+.admin-scene-settings h3{width:100%}.admin-scene-settings input{width:64px}
+@media(max-width:600px){.scene-window-large .scene-window-row{padding:12px;font-size:26px;gap:8px}.scene-window-large .scene-window-current{font-size:36px}.scene-window-counter{font-size:16px}.scene-bar .scene-window-row{min-width:145px}}
+@media(prefers-reduced-motion:reduce){.scene-window-row.is-queued{animation:none;box-shadow:inset 0 0 0 4px #fff}}

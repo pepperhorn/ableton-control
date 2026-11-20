@@ -22,9 +22,9 @@ test('rebound loopback Host requires auth and never grants settings',async t=>{
 });
 test('settings responses hide passwords and an empty field preserves the password',async t=>{
  const {port,saved,app}=await setup(t);
- a.deepEqual(JSON.parse((await req(port,'/api/config')).data),{port:8765,username:'band',hasPassword:true});
+ a.deepEqual(JSON.parse((await req(port,'/api/config')).data),{port:8765,username:'band',hasPassword:true,sceneBefore:2,sceneAfter:2});
  const result=await req(port,'/api/config',{port:8765,username:'new-band',password:''});
- a.deepEqual(JSON.parse(result.data),{port:8765,username:'new-band',hasPassword:true});
+ a.deepEqual(JSON.parse(result.data),{port:8765,username:'new-band',hasPassword:true,sceneBefore:2,sceneAfter:2});
  a.equal(saved[0].password,'pw');a.equal(app.getConfig().password,'pw');
 });
 function stream(port) {
@@ -495,4 +495,42 @@ test('timing route permits stopped Live without playback confirmation and report
  bridge.buildTiming=async()=>({ok:false,message:'Device removed',created:2,existing:0,noSource:0});
  const result=await req(port,'/api/timing-clips',{});a.equal(result.status,409);a.match(result.data,/Device removed/);
  bridge.buildTiming=async()=>{throw Error('Live stopped replying');};a.match((await req(port,'/api/timing-clips',{})).data,/stopped replying/);
+});
+
+test('config rejects sceneBefore 9 and falls back to 2', async t=>{
+ const {validConfig}=require('../device/lib/config');
+ a.equal(validConfig({port:8765,username:'band',password:'',sceneBefore:9}),false);
+ const {port}=await setup(t);
+ const result=await req(port,'/api/config',{port:8765,username:'band',password:'',sceneBefore:9,sceneAfter:0});
+ a.equal(result.status,400);
+ a.deepEqual(JSON.parse((await req(port,'/api/me')).data).sceneWindow,{before:2,after:2});
+});
+test('scene window settings save and appear for every identity',async t=>{
+ const {port,saved}=await setup(t);
+ a.equal((await req(port,'/api/settings',{sceneBefore:0,sceneAfter:8})).status,200);
+ a.equal(saved[0].sceneBefore,0);
+ a.deepEqual(JSON.parse((await req(port,'/api/me')).data).sceneWindow,{before:0,after:8});
+ for(const sceneAfter of [-1,9,1.5,'2',null])a.equal((await req(port,'/api/settings',{sceneAfter})).status,400);
+});
+
+test('invalid stored scene counts fall back independently without losing credentials',t=>{
+ const fs=require('fs'),os=require('os'),{loadConfig}=require('../device/lib/config');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'scene-config-'));t.after(()=>fs.rmSync(dir,{recursive:true}));
+ const file=path.join(dir,'config.json');
+ fs.writeFileSync(file,JSON.stringify({port:8765,username:'band',password:'keep',sceneBefore:9,sceneAfter:0}));
+ const cfg=loadConfig(file);a.equal(cfg.sceneBefore,2);a.equal(cfg.sceneAfter,0);a.equal(cfg.password,'keep');a.equal(cfg.configWarning,undefined);
+});
+
+test('scene settings require admin while every identity gets sceneWindow',async t=>{
+ const {sign}=require('../device/lib/access');
+ const secret='a'.repeat(64), member={id:'keith',name:'Keith',pages:['monitor'],mixes:[]};
+ for(const accessEnabled of [true,false]) {
+  const app=createApp({bridge:new EventEmitter(),config:{port:8765,username:'band',password:'pw',accessEnabled,members:[member],secret,sceneBefore:1,sceneAfter:3},remoteAddressOf:()=> '192.168.1.20'});
+  const port=await app.listen(0);t.after(()=>app.close());
+  for(const cookie of ['', 'st_id='+sign({kind:'member',memberId:member.id},secret)]) {
+   const headers={Authorization:'Basic '+Buffer.from('band:pw').toString('base64'),Cookie:cookie};
+   a.deepEqual(JSON.parse((await req(port,'/api/me',undefined,headers)).data).sceneWindow,{before:1,after:3});
+   a.equal((await req(port,'/api/settings',{sceneBefore:2},headers)).status,403);
+  }
+ }
 });
