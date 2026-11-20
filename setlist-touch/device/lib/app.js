@@ -245,7 +245,7 @@ function createApp({bridge, x32 = null, config = loadConfig(), saveConfig = pers
         if (!v || !Number.isInteger(v.bus) || v.bus < 1 || v.bus > 16 || !Array.isArray(v.hidden)) return reply(res,400,'Invalid hidden list');
         if (v.member !== undefined && identity.kind !== 'admin') return reply(res,403,'Admin required');
         const member = identity.kind === 'admin' && v.member !== undefined ? cfg.members.find(m => m.id === v.member) : identity.member;
-        if (!member || !xm.allowed(identity,v.bus) || !(member.buses || []).some(n => xm.busFor(n) === xm.busFor(v.bus))) return reply(res,403,'Bus not allowed');
+        if (!member || !xm.allowed(identity,v.bus) || cfg.accessEnabled && !(member.buses || []).some(n => xm.busFor(n) === xm.busFor(v.bus))) return reply(res,403,'Bus not allowed');
         const snapshot = xm.snapshot();
         if (!snapshot || !snapshot.buses.some(b => b.bus === xm.busFor(v.bus))) return reply(res,409,'Bus not available');
         if (v.hidden.some(id => !snapshot.sources.some(s => s.id === id))) return reply(res,400,'Invalid source');
@@ -266,7 +266,8 @@ function createApp({bridge, x32 = null, config = loadConfig(), saveConfig = pers
       if (route === '/api/x32-settings' && req.method === 'PUT') {
         if (identity.kind !== 'admin') return reply(res,403,'Admin required');
         let v; try { v = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
-        if (!v || typeof v !== 'object' || Array.isArray(v) || v.mixSource !== undefined && !['x32','ableton'].includes(v.mixSource) || v.host !== undefined && !validHost(v.host)) return reply(res,400,'Invalid X32 settings');
+        if (!v || typeof v !== 'object' || Array.isArray(v) || v.mixSource !== undefined && !['x32','ableton'].includes(v.mixSource)) return reply(res,400,'Invalid X32 settings');
+        if (v.host !== undefined && (!validHost(v.host) || v.host !== null && require('net').isIP(v.host) !== 4)) return reply(res,400,'Host must be dotted IPv4 without leading zeros, or null');
         if (changing) return reply(res,409,'Settings are being changed');
         changing = true;
         try {
