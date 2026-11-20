@@ -43,6 +43,8 @@ None.
 ---
 ## Receiver ack
 
+Codex, 2026-11-20: I will implement Task 1 only: the OSC codec, standalone X32 client, fake desk and their tests, preserving the named interfaces and fail-closed writes. I own only the five new files listed above and these task handoffs. I will verify the full suite, record real-desk assumptions, and open a draft PR. No open questions. GBrain keyword search found the prior X32 design conversation (2026-11-19); repository spec and plan govern implementation.
+
 ---
 ## Return
 (write in …--codex-to-lead.md)
