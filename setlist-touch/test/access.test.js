@@ -5,7 +5,7 @@ const {loadConfig}=require('../device/lib/config');
 const member={id:'one',name:'Alex',pages:['monitor'],mixes:['Alex']};
 const cfg=normalizeAccess({accessEnabled:true,members:[member],adminPassword:'secret'});
 test('signed identities reject tampering, removed ids, changed secrets and malformed payloads',()=>{
- const token=sign({kind:'member',memberId:'one'},cfg.secret), resolve=(token,c=cfg)=>identify({cookie:'st_id='+token},c);
+ const token=sign({kind:'member',memberId:'one',exp:Date.now()+86400000},cfg.secret), resolve=(token,c=cfg)=>identify({cookie:'st_id='+token},c);
  a.equal(resolve(token).kind,'member');
  for(const bad of [token+'x','garbage',sign({kind:'member',memberId:'missing'},cfg.secret),sign(null,cfg.secret)])a.equal(resolve(bad).kind,'none');
  a.equal(resolve(token,{...cfg,secret:'a'.repeat(64)}).kind,'none');
@@ -92,4 +92,24 @@ test('stale damaged backup is not reported as a recovery copy of current damaged
  fs.writeFileSync(file,'broken current');fs.writeFileSync(file+'.damaged','broken previous');
  a.equal(loadConfig(file).configWarning.backupAvailable,false);a.equal(fs.readFileSync(file+'.damaged','utf8'),'broken previous');
  fs.writeFileSync(file+'.damaged','broken current');a.equal(loadConfig(file).configWarning.backupAvailable,true);
+});
+
+test('member cookie expires after 24h; expired member gets kind none',()=>{
+ const {memberToken}=require('../device/lib/access');const now=1000000,payload=memberToken(member,now);
+ a.equal(payload.exp,now+86400000);
+ const resolve=(exp,time)=>identify({cookie:'st_id='+sign({...payload,exp},cfg.secret),now:time},cfg);
+ a.equal(resolve(payload.exp,payload.exp-1).kind,'member');
+ for(const exp of [undefined,payload.exp,'forever'])a.equal(resolve(exp,payload.exp).kind,'none');
+});
+test('slugFor and reserved static paths',()=>{
+ const {slugFor,reservedSlug}=require('../device/lib/access');a.equal(slugFor('Keith Ray'),'keith-ray');a.equal(slugFor(' -- Keith & RAY -- '),'keith-ray');
+ for(const name of ['','admin','api','js','css','fonts','settings','diagnostic','touch-test','index.html','style.css'])a.equal(reservedSlug(name),true,name);
+});
+test('admin and open keep permissions with independent display identity',()=>{
+ const {memberToken,adminToken}=require('../device/lib/access');const who='st_who='+sign(memberToken(member),cfg.secret);
+ for(const args of [{trusted:true,cookie:who},{cookie:'st_id='+sign(adminToken(cfg),cfg.secret)+'; '+who}]){
+  const id=identify(args,cfg);a.equal(id.kind,'admin');a.equal(id.member.id,member.id);a.equal(can(id,'fire'),true);
+ }
+ const id=identify({cookie:who},{...cfg,accessEnabled:false});a.equal(id.kind,'open');a.equal(meFor(id,cfg).name,'Alex');a.equal(meFor(id,cfg).link,'/alex');
+ a.equal(identify({cookie:who},cfg).kind,'none');
 });

@@ -33,6 +33,7 @@ export function renderSceneWindow(el, view, options) {
       const node=document.createElement(options.canLaunch?'button':'div');
       node.className='scene-window-row scene-window-'+row.role;
       node.dataset.sceneIndex=row.index;
+      node.dataset.name=row.name;
       if(options.canLaunch) {node.type='button';node.setAttribute('aria-disabled',String(options.locked));}
       const color=row.color>>>0;
       node.style.backgroundColor='#'+color.toString(16).padStart(6,'0').slice(-6);

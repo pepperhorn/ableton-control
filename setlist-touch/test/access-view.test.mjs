@@ -29,7 +29,7 @@ function shellHarness({local=false,prefs={page:'mix',tab:'Keith'},config={}}={})
  function target() {const handlers=new Map();return {addEventListener(type,fn){handlers.set(type,fn);},emit(type,event={}){return handlers.get(type)?.(event);}};}
  function node() {return {...target(),hidden:false,textContent:'',dataset:{},style:{},setAttribute(){},classList:{add(){},remove(){}}};}
  const get=selector=>{if(!nodes.has(selector))nodes.set(selector,node());return nodes.get(selector);};
- const form=get('.settings-form');form.elements=Object.fromEntries(['port','username','password','adminPassword','accessEnabled'].map(key=>[key,{name:key,value:key==='port'?'5290':key==='username'?'band':'',checked:false}]));
+ const form=get('.settings-form');form.elements=Object.fromEntries(['port','username','password','adminPassword','accessEnabled','allowOpenLan'].map(key=>[key,{name:key,value:key==='port'?'5290':key==='username'?'band':'',checked:false}]));
  const sceneForm=get('.admin-scene-settings');sceneForm.contains=()=>false;sceneForm.elements={sceneBefore:{value:2},sceneAfter:{value:2}};
  const location={hostname:local?'localhost':'127.0.0.2',hash:'',search:'',port:'5290'};
  const document={...target(),querySelector:get,querySelectorAll:()=>[],body:{dataset:{}}};
@@ -142,4 +142,21 @@ test('timing form displays fallback refusal and nonfatal name warnings from resu
  a.match(h.get('.timing-status').textContent,/own MIDI track/);
  h.events.emit('timing',{data:JSON.stringify({running:false,ok:true,created:3,existing:0,noSource:0,unnamed:2})});
  a.match(h.get('.timing-status').textContent,/Build complete/);a.match(h.get('.timing-status').textContent,/Warning: 2 clip name/);
+});
+
+test('picker required without name when access on, optional once when off',()=>{
+ a.equal(showPicker({kind:'admin',accessEnabled:true,name:null}),true);
+ a.equal(showPicker({kind:'open',accessEnabled:false,members:[{name:'Alex'}]},false),true);
+ a.equal(showPicker({kind:'open',accessEnabled:false,members:[{name:'Alex'}]},true),false);
+ a.equal(showPicker({kind:'member',accessEnabled:true,name:'Alex'}),false);
+});
+
+test('Monitor launch uses the drawn name even when the current set has renamed it',async()=>{
+ let onLaunch;
+ const source=fs.readFileSync(new URL('../device/web/js/app.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('import(', 'importModule(');
+ // Capture the real callback directly from the module's lazy-loader setup.
+ const callback=source.slice(source.indexOf('    monitorUI = createMonitorRenderer'),source.indexOf('    }}); shell();')+8);
+ const row={dataset:{sceneIndex:'23',name:'Drawn title'}};let launched;
+ vm.runInNewContext(callback,{createMonitorRenderer:opts=>{onLaunch=opts.onLaunch;},document:{querySelector:()=>row},monitorSongs:[{rows:[{sceneIndex:23,name:'Renamed title'}]}],launch:r=>{launched=r.dataset.name;}});
+ onLaunch(23);a.equal(launched,'Drawn title');
 });

@@ -22,9 +22,9 @@ test('rebound loopback Host requires auth and never grants settings',async t=>{
 });
 test('settings responses hide passwords and an empty field preserves the password',async t=>{
  const {port,saved,app}=await setup(t);
- a.deepEqual(JSON.parse((await req(port,'/api/config')).data),{port:8765,username:'band',hasPassword:true,sceneBefore:2,sceneAfter:2});
+ a.deepEqual(JSON.parse((await req(port,'/api/config')).data),{port:8765,username:'band',hasPassword:true,allowOpenLan:false,sceneBefore:2,sceneAfter:2});
  const result=await req(port,'/api/config',{port:8765,username:'new-band',password:''});
- a.deepEqual(JSON.parse(result.data),{port:8765,username:'new-band',hasPassword:true,sceneBefore:2,sceneAfter:2});
+ a.deepEqual(JSON.parse(result.data),{port:8765,username:'new-band',hasPassword:true,allowOpenLan:false,sceneBefore:2,sceneAfter:2});
  a.equal(saved[0].password,'pw');a.equal(app.getConfig().password,'pw');
 });
 function stream(port) {
@@ -271,7 +271,7 @@ test('access routes enforce admin, basic auth, origin and identity; laptop recov
  a.equal((await req(port,'/api/members',{members:[]},phone)).status,403);
  a.equal((await req(port,'/api/identify',{memberId:'missing'},phone)).status,404);
  a.equal((await req(port,'/api/identify',{memberId:'alex'},{...phone,Origin:'http://evil'})).status,403);
- const chosen=await req(port,'/api/identify',{memberId:'alex'},phone);a.equal(chosen.status,204);a.match(chosen.headers['set-cookie'][0],/HttpOnly; SameSite=Strict; Path=\/; Max-Age=31536000/);
+ const chosen=await req(port,'/api/identify',{memberId:'alex'},phone);a.equal(chosen.status,204);a.match(chosen.headers['set-cookie'][0],/HttpOnly; SameSite=Strict; Path=\/; Max-Age=86400/);
  const player={...phone,Cookie:cookieOf(chosen)};
  a.equal(JSON.parse((await req(port,'/api/me',undefined,player)).data).name,'Alex');
  for(const route of ['/api/fire','/api/transport','/api/members'])a.equal((await req(port,route,{},player)).status,403);
@@ -419,7 +419,7 @@ test('player timeout releases lock and ignores late Live success',async t=>{
 test('member cannot forge an effect send to another player by naming their permitted mix',async t=>{
  const {sign}=require('../device/lib/access');const secret='a'.repeat(64);const bridge=new EventEmitter();const app=createApp({bridge,remoteAddressOf:()=> '192.168.1.2',config:{port:8765,username:'band',password:'pw',accessEnabled:true,members:[{id:'one',name:'Shaun',pages:['monitor'],mixes:['Shaun']}],secret}});
  const port=await app.listen(0);t.after(()=>app.close());const raw=JSON.parse(JSON.stringify(require('../device/lib/fixture-mix.json')));raw.effects=[{index:0,name:raw.returns[0].name,color:0,sends:{2:{value:0,label:''},3:{value:0,label:''}}}];bridge.emit('mix',raw);
- const writes=[];bridge.setEffectSend=(...v)=>writes.push(v);const headers={Authorization:'Basic '+Buffer.from('band:pw').toString('base64'),Cookie:'st_id='+sign({kind:'member',memberId:'one'},secret)};
+ const writes=[];bridge.setEffectSend=(...v)=>writes.push(v);const headers={Authorization:'Basic '+Buffer.from('band:pw').toString('base64'),Cookie:'st_id='+sign({kind:'member',memberId:'one',exp:Date.now()+86400000},secret)};
  const command={effectIndex:0,returnIndex:3,returnName:'Shaun',rawName:raw.returns[0].name,value:0.3};a.equal((await req(port,'/api/effect-send',command,headers)).status,403);a.equal(writes.length,0);
  a.equal((await req(port,'/api/effect-send',{...command,returnIndex:2},headers)).status,204);a.equal(writes.length,1);
 });
@@ -527,10 +527,70 @@ test('scene settings require admin while every identity gets sceneWindow',async 
  for(const accessEnabled of [true,false]) {
   const app=createApp({bridge:new EventEmitter(),config:{port:8765,username:'band',password:'pw',accessEnabled,members:[member],secret,sceneBefore:1,sceneAfter:3},remoteAddressOf:()=> '192.168.1.20'});
   const port=await app.listen(0);t.after(()=>app.close());
-  for(const cookie of ['', 'st_id='+sign({kind:'member',memberId:member.id},secret)]) {
+  for(const cookie of ['', 'st_id='+sign({kind:'member',memberId:member.id,exp:Date.now()+86400000},secret)]) {
    const headers={Authorization:'Basic '+Buffer.from('band:pw').toString('base64'),Cookie:cookie};
    a.deepEqual(JSON.parse((await req(port,'/api/me',undefined,headers)).data).sceneWindow,{before:1,after:3});
    a.equal((await req(port,'/api/settings',{sceneBefore:2},headers)).status,403);
   }
  }
+});
+
+async function identitySetup(t,extra={},clock=Date.now) {
+ const {normalizeAccess}=require('../device/lib/access');let remote='192.168.1.20';const bridge=new EventEmitter();
+ const config=normalizeAccess({port:8765,username:'band',password:'',allowOpenLan:true,accessEnabled:true,adminPassword:'admin-pw',members:[{id:'keith',name:'Keith Ray',pages:['monitor','scenes'],mixes:[]}],...extra});
+ const app=createApp({bridge,config,saveConfig:async()=>{},remoteAddressOf:()=>remote,now:clock});const port=await app.listen(0);t.after(()=>app.close());
+ return {port,app,config,bridge,laptop(){remote='127.0.0.1';}};
+}
+test('/<slug> sets member cookie and redirects; link listed in /api/members',async t=>{
+ const h=await identitySetup(t);const res=await req(h.port,'/keith-ray');a.equal(res.status,302);a.equal(res.headers.location,'/');a.match(res.headers['set-cookie'][0],/Max-Age=86400/);
+ const cookie=res.headers['set-cookie'][0].split(';')[0];const me=JSON.parse((await req(h.port,'/api/me',undefined,{Cookie:cookie})).data);a.equal(me.name,'Keith Ray');a.equal(me.link,'/keith-ray');
+ a.equal((await req(h.port,'/unknown-member')).status,200);h.laptop();a.equal(JSON.parse((await req(h.port,'/api/members')).data)[0].link,'/keith-ray');
+});
+test('/<slug> on admin session keeps admin and sets st_who; forget preserves admin',async t=>{
+ const h=await identitySetup(t);const login=await req(h.port,'/api/admin-login',{password:'admin-pw'});const admin=login.headers['set-cookie'][0].split(';')[0];
+ const res=await req(h.port,'/keith-ray',undefined,{Cookie:admin});a.match(res.headers['set-cookie'][0],/^st_who=/);
+ const cookie=admin+'; '+res.headers['set-cookie'][0].split(';')[0];const me=JSON.parse((await req(h.port,'/api/me',undefined,{Cookie:cookie})).data);a.equal(me.kind,'admin');a.equal(me.name,'Keith Ray');
+ const forget=await req(h.port,'/api/forget',{}, {Cookie:cookie});a.equal(forget.headers['set-cookie'].length,1);a.match(forget.headers['set-cookie'][0],/^st_who=;.*Max-Age=0/);
+});
+test('forget clears both cookies for member; /api/me names member when access off',async t=>{
+ const h=await identitySetup(t,{accessEnabled:false});const res=await req(h.port,'/api/identify',{memberId:'keith'});const cookie=res.headers['set-cookie'][0].split(';')[0];
+ const me=JSON.parse((await req(h.port,'/api/me',undefined,{Cookie:cookie})).data);a.equal(me.kind,'open');a.equal(me.name,'Keith Ray');
+ const forget=await req(h.port,'/api/forget',{}, {Cookie:cookie});a.equal(forget.headers['set-cookie'].length,2);for(const c of forget.headers['set-cookie'])a.match(c,/Max-Age=0/);
+});
+test('reserved and duplicate slugs refused',async t=>{
+ const h=await identitySetup(t);h.laptop();
+ for(const names of [['Admin'],['!!!'],['Keith Ray','Keith--Ray'],['Style.css'],['touch-test']]){
+  const res=await req(h.port,'/api/members',{members:names.map(name=>({name,pages:['monitor'],mixes:[]}))});a.equal(res.status,400,names.join());a.equal(res.data,"That name can't be used for a link");
+ }
+});
+test('allowOpenLan defaults closed and changes stay loopback-only',async t=>{
+ const h=await identitySetup(t);a.equal((await req(h.port,'/api/settings',{allowOpenLan:false})).status,403);
+ h.laptop();a.equal((await req(h.port,'/api/config',{port:8765,username:'band',password:'',allowOpenLan:'yes'})).status,400);
+ a.equal((await req(h.port,'/api/config',{port:8765,username:'band',password:'',allowOpenLan:false})).status,200);a.equal(h.app.getConfig().allowOpenLan,false);
+});
+test('expired identity is none on API and cannot write after expiry',async t=>{
+ const h=await identitySetup(t);const {sign}=require('../device/lib/access');const Cookie='st_id='+sign({kind:'member',memberId:'keith',exp:Date.now()-1},h.config.secret);
+ a.equal(JSON.parse((await req(h.port,'/api/me',undefined,{Cookie})).data).kind,'none');a.equal((await req(h.port,'/api/fire',{sceneIndex:0,name:'x'},{Cookie})).status,403);
+});
+
+test('server clock expires an already-open member session at the 24-hour boundary',async t=>{
+ let now=1000000;const h=await identitySetup(t,{},()=>now);
+ const res=await req(h.port,'/api/identify',{memberId:'keith'});const Cookie=res.headers['set-cookie'][0].split(';')[0];
+ const me=async()=>JSON.parse((await req(h.port,'/api/me',undefined,{Cookie})).data);
+ now+=86400000-1;a.equal((await me()).kind,'member');now++;a.equal((await me()).kind,'none');
+ a.equal((await req(h.port,'/api/send',{},{Cookie})).status,403);
+});
+test('member display identity survives admin sign-in and link URLs match the panel address',async t=>{
+ const h=await identitySetup(t);const selected=await req(h.port,'/keith-ray');const Cookie=selected.headers['set-cookie'][0].split(';')[0];
+ const login=await req(h.port,'/api/admin-login',{password:'admin-pw'},{Cookie});const cookies=login.headers['set-cookie'].map(c=>c.split(';')[0]).join('; ');
+ const me=JSON.parse((await req(h.port,'/api/me',undefined,{Cookie:cookies})).data);a.equal(me.kind,'admin');a.equal(me.name,'Keith Ray');
+ const ip=Object.values(require('os').networkInterfaces()).flat().find(i=>(i.family==='IPv4'||i.family===4)&&!i.internal);
+ const members=JSON.parse((await req(h.port,'/api/members',undefined,{Cookie:cookies})).data);
+ a.equal(members[0].url,`http://${ip?ip.address:'127.0.0.1'}:${h.port}/keith-ray`);
+});
+
+test('laptop logout clears a member st_id while retaining loopback admin authority',async t=>{
+ const h=await identitySetup(t);const member=await req(h.port,'/keith-ray');const Cookie=member.headers['set-cookie'][0].split(';')[0];h.laptop();
+ const me=JSON.parse((await req(h.port,'/api/me',undefined,{Cookie})).data);a.equal(me.kind,'admin');a.equal(me.name,'Keith Ray');
+ const res=await req(h.port,'/api/forget',{}, {Cookie});a.equal(res.headers['set-cookie'].length,2);a.match(res.headers['set-cookie'][0],/^st_id=;.*Max-Age=0/);
 });

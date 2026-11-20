@@ -20,7 +20,7 @@ function checkBasic(header, config) {
 }
 function authorize({remoteAddress, host, authorization}, config) {
   if (isTrustedLoopback(remoteAddress, host)) return 'ok';
-  if (!config.password) return 'forbidden';
+  if (!config.password) return config.allowOpenLan === true ? 'ok' : 'forbidden';
   return checkBasic(authorization, config) ? 'ok' : 'challenge';
 }
 module.exports = {isLoopback, isTrustedLoopback, checkBasic, authorize};
