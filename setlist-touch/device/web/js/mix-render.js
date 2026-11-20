@@ -1,3 +1,4 @@
+import {createX32Renderer} from './x32-render.js';
 import {createFaderGesture} from './fader.js';
 import {faderValue, valueLabel, createFaderHolds} from './mix-view.js';
 import {canLaunch} from './view-state.js';
@@ -7,13 +8,18 @@ function el(tag, className, text) {
   if (text !== undefined) node.textContent = text;
   return node;
 }
-export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, status}) {
+export function createMixRenderer(options) {
+  const ableton=createAbletonRenderer(options), x32=createX32Renderer(options);
+  const active=()=>options.x32Of().mixSource==='x32' ? x32 : ableton;
+  return {render(){ableton.cancel();x32.cancel();document.querySelector('.mix-list').classList.toggle('mix-strips',active()===x32);active().render();},cancel(){ableton.cancel();x32.cancel();},updateLevels(echo){active().updateLevels(echo);},syncAvailability(){active().syncAvailability();}};
+}
+function createAbletonRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, status, x32Of}) {
   const pointers = new Set(), channels = new Map();
   let gesture = null, dragging = null;
   const holds = createFaderHolds({onExpire:() => updateLevels()});
   const keyOf = row => `${row.dataset.effect === "true" ? "e" : ""}${row.dataset.trackIndex}:${row.dataset.returnIndex}`;
   function selectedReturn() { return mixOf().returns.find(r => r.name === viewOf().tab); }
-  function usable() { return viewOf().page === 'mix' && location.hash !== '#settings' && canLaunch(stateOf()); }
+  function usable() { return x32Of().mixSource !== 'x32' && viewOf().page === 'mix' && location.hash !== '#settings' && canLaunch(stateOf()); }
   function currentLevel(row) {
     const strip = (row.dataset.effect === "true" ? mixOf().effects || [] : mixOf().strips).find(s => (row.dataset.effect === "true" ? s.effectIndex : s.trackIndex) === Number(row.dataset.trackIndex));
     return strip && strip.levels[Number(row.dataset.returnIndex)];
@@ -77,6 +83,7 @@ export function createMixRenderer({stateOf, mixOf, viewOf, onTab, onSnapshot, st
   }
   function render() {
     cancel();
+    $('.mix-hint').textContent='Slide sideways to adjust · scroll to browse';
     const ret = selectedReturn(), mix = mixOf(), tabs = $('.send-tabs'), list = $('.mix-list');
     tabs.replaceChildren(); list.replaceChildren();
     for (const r of mix.returns) {

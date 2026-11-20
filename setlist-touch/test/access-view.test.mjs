@@ -170,3 +170,8 @@ test('Monitor launch uses the drawn name even when the current set has renamed i
  vm.runInNewContext(callback,{createMonitorRenderer:opts=>{onLaunch=opts.onLaunch;},document:{querySelector:()=>row},monitorSongs:[{rows:[{sceneIndex:23,name:'Renamed title'}]}],launch:r=>{launched=r.dataset.name;}});
  onLaunch(23);a.equal(launched,'Drawn title');
 });
+
+test('X32 members can reach mix page with no assigned or available bus; none identity cannot',()=>{
+ a.ok(allowedPages({...member,mixes:[],mixSource:'x32',buses:[]},{returns:[]}).includes('mix'));
+ a.ok(!allowedPages({kind:'none',pages:['monitor'],mixes:[],mixSource:'x32',buses:[]},{returns:[]}).includes('mix'));
+});

@@ -16,3 +16,8 @@ test('second pointer cancels until all pointers lift; cancellation and wrong poi
  f.down(3,0,0,0.5);a.equal(f.move(9,100,0),null);a.equal(f.move(3,100,0),0.75);f.cancel(3);a.equal(f.up(3),null);
  f.down(4,0,0,0.5);a.equal(f.move(4,100,0),0.75);
 });
+
+import {axisLock,createVerticalFaderGesture} from '../device/web/js/fader.js';
+test('axisLock x for sideways drag starting on fader',()=>{a.equal(axisLock(10,2),null);a.equal(axisLock(11,2),'x');a.equal(axisLock(11,11),'x');a.equal(axisLock(2,-11),'y');});
+test('vertical tap does not change value; sideways gesture never writes',()=>{const f=createVerticalFaderGesture({fullScalePx:200});f.down(1,10,10,0.5);a.equal(f.move(1,12,12),null);a.equal(f.up(1),null);f.down(2,0,0,0.5);a.equal(f.move(2,20,1),null);a.equal(f.move(2,20,-100),null);a.equal(f.up(2),null);});
+test('vertical fader is relative and stays axis locked',()=>{const f=createVerticalFaderGesture({fullScalePx:200});f.down(1,0,100,0.5);a.equal(f.move(1,1,50),0.75);a.equal(f.move(1,100,0),1);a.equal(f.up(1),1);});

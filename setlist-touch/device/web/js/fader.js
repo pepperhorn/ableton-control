@@ -34,3 +34,23 @@ export function createFaderGesture({slop = 8, fullScalePx} = {}) {
     }
   };
 }
+
+// X32 vertical faders decide direction once; the existing Ableton gesture stays unchanged.
+export function axisLock(dx, dy) {
+  if (Math.max(Math.abs(dx),Math.abs(dy)) <= 10) return null;
+  return Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+}
+export function createVerticalFaderGesture({fullScalePx} = {}) {
+  let drag = null;
+  return {
+    down(id,x,y,startValue) { drag = Number.isFinite(startValue) && fullScalePx > 0 ? {id,x,y,startValue,axis:null,value:null} : null; },
+    move(id,x,y) {
+      if (!drag || drag.id !== id) return null;
+      drag.axis = drag.axis || axisLock(x-drag.x,y-drag.y);
+      if (drag.axis !== 'y') return null;
+      return drag.value = clamp(drag.startValue + (drag.y-y)/fullScalePx);
+    },
+    up(id) { if (!drag || drag.id !== id) return null; const value=drag.value; drag=null; return value; },
+    cancel() { drag=null; }
+  };
+}
