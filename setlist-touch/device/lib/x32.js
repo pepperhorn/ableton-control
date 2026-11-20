@@ -8,7 +8,7 @@ function levelToDb(value) {
   const v = Math.max(0,Math.min(1,value));
   if (v === 0) return '-inf dB';
   const db = v >= 0.5 ? v*40-30 : v >= 0.25 ? v*80-50 : v >= 0.0625 ? v*160-70 : v*480-90;
-  return `${db.toFixed(1)} dB`;
+  return `${(Math.abs(db) < 0.05 ? 0 : db).toFixed(1)} dB`;
 }
 function defaultLabel(target) {
   const [kind,number] = String(target).split('/'), n = Number(number);
@@ -17,12 +17,17 @@ function defaultLabel(target) {
 function createX32({socket,host = null,discover = true,port = 10023,setTimer = setTimeout,clearTimer = clearTimeout,now = Date.now}) {
   const client = new EventEmitter();
   let manual = host, peer = null, running = false, timer = null, listening = false, generation = 0;
+  let lastStatus = null;
   let state = 'searching', name = '', model = '', snapshot = null, loading = null;
   let lastPacket = 0, nextProbe = 0, probeDeadline = null, nextRemote = 0;
   let queue = [], pending = new Map(), fields = new Map(), links = new Map(), phase = '';
   client.status = () => ({state,host:peer || manual,name,model});
   client.snapshot = () => snapshot ? clone(snapshot) : null;
-  function emitStatus() { client.emit('status',client.status()); }
+  function emitStatus() {
+    const status = client.status(), key = JSON.stringify(status);
+    if (key === lastStatus) return;
+    lastStatus = key; client.emit('status',status);
+  }
   function discard() { generation++; snapshot = null; loading = null; queue = []; pending.clear(); fields.clear(); links.clear(); phase = ''; }
   function lost() {
     discard(); state = 'lost'; probeDeadline = null; nextProbe = now()+3000; emitStatus();
@@ -51,7 +56,7 @@ function createX32({socket,host = null,discover = true,port = 10023,setTimer = s
   function beginLoad() {
     discard(); state = 'searching'; loading = {sources:[],buses:[]}; phase = 'links';
     for (let n=1;n<16;n+=2) add(`/config/buslink/${n}-${n+1}`,{kind:'link',bus:n});
-    nextRemote = now()+8000; send('/xremote'); emitStatus();
+    nextRemote = now()+8000; send('/xremote'); send('/xinfo'); emitStatus();
   }
   function addContent() {
     phase = 'content';
@@ -99,7 +104,7 @@ function createX32({socket,host = null,discover = true,port = 10023,setTimer = s
     if (!descriptor || msg.args.length !== 1 || !valid(descriptor,msg.args[0])) return;
     const value = msg.args[0], wasLoading = !!loading;
     if (descriptor.kind === 'link') {
-      if (!wasLoading && links.get(descriptor.bus) !== value) { beginLoad(); return; }
+      if ((!wasLoading || phase === 'content') && links.get(descriptor.bus) !== value) { beginLoad(); return; }
       links.set(descriptor.bus,value);
     } else {
       const target = descriptor.target;
@@ -120,7 +125,7 @@ function createX32({socket,host = null,discover = true,port = 10023,setTimer = s
     if ((loading || state === 'connected') && now()-lastPacket >= 20000) lost();
     if (probeDeadline !== null && now() >= probeDeadline) { lost(); nextProbe = now(); }
     if (!loading && state !== 'connected' && now() >= nextProbe) probe();
-    if ((loading || state === 'connected') && now() >= nextRemote) { nextRemote = now()+8000; send('/xremote'); }
+    if ((loading || state === 'connected') && now() >= nextRemote) { nextRemote = now()+8000; send('/xremote'); send('/xinfo'); }
     // At most 40 queries per 50 ms tick, at most 100 outstanding. Retry lost
     // UDP reads twice; a missing field never becomes a fabricated live value.
     let budget = 40;
@@ -133,14 +138,14 @@ function createX32({socket,host = null,discover = true,port = 10023,setTimer = s
     while (running && loading && budget > 0 && queue.length && pending.size < 100) {
       budget--; const address = queue.shift(); pending.set(address,{at:now(),tries:1}); send(address);
     }
-    if (running) timer = setTimer(tick,50);
+    if (running && timer === null) timer = setTimer(tick,50);
   }
   client.start = () => {
     if (running) return;
     running = true; peer = null; name = ''; model = ''; state = 'searching'; discard();
     if (!listening) { socket.on('message',message); socket.on('error',onError); listening = true; }
     emitStatus(); probe();
-    timer = setTimer(tick,50);
+    if (running && timer === null) timer = setTimer(tick,50);
   };
   function onError() { if (running) lost(); }
   client.stop = () => {
@@ -158,7 +163,10 @@ function createX32({socket,host = null,discover = true,port = 10023,setTimer = s
     const n = busFor(bus), target = snapshot.buses.find(b => b.bus === n);
     if (!target || source !== 'master' && !snapshot.sources.some(s => s.id === source)) return false;
     const address = source === 'master' ? `/bus/${pad(n)}/mix/fader` : `/${source}/mix/${pad(n)}/level`;
-    return send(address,[Math.max(0,Math.min(1,value))]);
+    const sent = send(address,[Math.max(0,Math.min(1,value))]);
+    // Read authoritative desk state even when writes are not echoed to us.
+    if (sent && state === 'connected' && snapshot) send(address);
+    return sent;
   }
   client.setSend = (bus,source,value) => source !== 'master' && write(bus,source,value);
   client.setBusMaster = (bus,value) => write(bus,'master',value);

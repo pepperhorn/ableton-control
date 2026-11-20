@@ -5,10 +5,10 @@ const {EventEmitter} = require('events');
 const {encode, decode} = require('../device/lib/osc');
 const {createX32, levelToDb, defaultLabel} = require('../device/lib/x32');
 const {createFakeX32} = require('../device/lib/fake-x32');
-function harness(options = {}) {
+function harness(options = {}, fakeOptions = {}) {
   let time = 0, next = 0, online = true;
   const timers = new Map(), sent = [], socket = new EventEmitter();
-  const desk = createFakeX32({linked:[5], sources:[{id:'ch/03',name:'Vocal',color:3}]});
+  const desk = createFakeX32({linked:[5], sources:[{id:'ch/03',name:'Vocal',color:3}], ...fakeOptions});
   socket.setBroadcast = () => {};
   const reply = (buf, host = '192.168.1.32', port = 10023) => socket.emit('message', buf, {address:host,port});
   socket.send = (buf, port, host) => { sent.push({host,port,...decode(buf)}); if (online) desk.handle(buf, reply); };
@@ -140,4 +140,66 @@ test('unanswered /xinfo goes lost at 3 s and retries every 3 s', () => {
   a.equal(h.client.status().state,'searching'); a.equal(h.sent.length,1); h.advance(50);
   a.equal(h.client.status().state,'lost'); a.equal(h.sent.length,2); h.advance(3000);
   a.equal(h.sent.length,3); h.client.stop();
+});
+
+test('idle desk stays connected for 60 s without snapshot reloads or unbounded queries', () => {
+  const h = harness(), statuses = []; let snapshots = 0;
+  h.client.on('status', s => statuses.push(s.state)); h.client.on('snapshot', () => snapshots++);
+  h.client.start(); h.advance(2000); const reads = h.sent.length;
+  h.advance(60000);
+  a.equal(h.client.status().state,'connected'); a.ok(!statuses.includes('lost')); a.equal(snapshots,1);
+  const renewal = h.sent.slice(reads);
+  a.equal(renewal.filter(p => p.address === '/xremote').length,7);
+  a.equal(renewal.filter(p => p.address === '/xinfo').length,7);
+  a.equal(renewal.length,14); a.ok(renewal.every(p => p.host === '192.168.1.32'));
+  h.client.stop();
+});
+test('write readback updates sends and master without a desk write echo', () => {
+  const h = harness({}, {echoWrites:false}), levels = [];
+  h.client.start(); h.advance(2000); h.client.on('level', e => levels.push(e)); const first = h.sent.length;
+  a.equal(h.client.setSend(6,'ch/03',0.5),true); a.equal(h.client.setBusMaster(6,0.75),true);
+  a.deepEqual(h.sent.slice(first).map(p => [p.address,p.args]),[
+    ['/ch/03/mix/05/level',[0.5]], ['/ch/03/mix/05/level',[]],
+    ['/bus/05/mix/fader',[0.75]], ['/bus/05/mix/fader',[]]
+  ]);
+  const bus = h.client.snapshot().buses.find(b => b.bus===5);
+  a.equal(bus.sends['ch/03'],0.5); a.equal(bus.master,0.75);
+  a.deepEqual(levels,[{bus:5,source:'ch/03',value:0.5},{bus:5,source:'master',value:0.75}]);
+  h.client.stop();
+});
+test('fake echoWrites false suppresses write replies but answers subsequent queries', () => {
+  const desk = createFakeX32({echoWrites:false}), replies = [];
+  desk.handle(encode('/bus/01/mix/fader',[0.5]),buf => replies.push(decode(buf)));
+  a.equal(replies.length,0); a.equal(desk.state['/bus/01/mix/fader'],0.5);
+  desk.handle(encode('/bus/01/mix/fader',[]),buf => replies.push(decode(buf)));
+  a.deepEqual(replies,[{address:'/bus/01/mix/fader',args:[0.5]}]);
+});
+test('buslink change during initial content load restarts with consistent topology', () => {
+  const h = harness(); let snapshots = 0; h.client.on('snapshot',()=> snapshots++);
+  h.client.start(); h.advance(50); a.equal(h.client.snapshot(),null);
+  h.desk.state['/config/buslink/5-6'] = 0;
+  h.reply(encode('/config/buslink/5-6',[{type:'i',value:0}]));
+  h.advance(2000); const buses = h.client.snapshot().buses;
+  a.equal(snapshots,1); a.equal(buses.length,16); a.equal(h.client.busFor(6),6);
+  a.equal(buses.find(b=>b.bus===5).linked,false); a.ok(buses.some(b=>b.bus===6));
+  a.equal(h.sent.filter(p=>p.address==='/config/buslink/5-6').length,2); h.client.stop();
+});
+test('levelToDb normalizes negative zero at the unity boundary', () => {
+  for (const value of [0.7499,0.75,0.7501]) a.equal(levelToDb(value),'0.0 dB');
+  a.equal(levelToDb(0.748),'-0.1 dB');
+});
+test('stop/start inside a tick status callback leaves one timer loop', () => {
+  const h = harness(); let restarted = false;
+  h.client.on('status',s => { if (s.state==='connected' && !restarted) {restarted=true; h.client.stop(); h.client.start();} });
+  h.client.start(); h.advance(3000); a.equal(restarted,true);
+  a.equal(h.timers.size,1); a.equal(h.client.status().state,'connected');
+  h.client.stop(); a.equal(h.timers.size,0);
+});
+test('unchanged searching or lost status is not re-emitted on probe retries', () => {
+  const h = harness(), statuses = []; h.offline(); h.client.on('status',s=>statuses.push(s));
+  h.client.start(); h.advance(12000);
+  a.deepEqual(statuses.map(s=>s.state),['searching','lost']); h.client.stop();
+  const disabled = harness({discover:false}), searching = [];
+  disabled.client.on('status',s=>searching.push(s)); disabled.client.start(); disabled.advance(12000);
+  a.equal(searching.length,1); disabled.client.stop();
 });
