@@ -64,6 +64,8 @@ None.
 ---
 ## Receiver ack
 
+I will implement Task 3 identity expiry, personal links, logout and the explicit open-LAN switch, plus the two bounded Task 2 scene fixes. I will change only the assigned runtime/UI files, CSS, their tests and my handoffs; preserve admin permission independently of display identity; verify the full suite, device build and both browser sizes; then push this branch and open a draft PR. No open questions. GBrain search returned no task-specific evidence (coverage degraded); repo spec and plan govern.
+
 ---
 ## Return
 (write in …--codex-to-lead.md)
