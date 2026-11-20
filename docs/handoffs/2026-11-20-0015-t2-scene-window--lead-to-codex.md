@@ -43,6 +43,8 @@ None.
 ---
 ## Receiver ack
 
+I will implement Task 2 only: the bounded pure sceneWindow interface, large locked-by-default Monitor with permission-gated clean taps, read-only mix bar with local preference, and validated sceneBefore/sceneAfter admin settings. I own only the listed device web/settings files, related tests, and this task’s handoffs. No interface questions. GBrain search returned unrelated results; repository spec and plan govern. Local tests do not establish Live/Windows or physical touch acceptance.
+
 ---
 ## Return
 (write in …--codex-to-lead.md)
