@@ -9,7 +9,7 @@
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-e940f129-fcf98da7e7c6e5bc
 - **Base commit:** ac69fedf7f7731556770998cf46914835edcd72c (contains required 8790c29)
 - **Implementation commit:** 88b2f31
-- **PR:** draft creation follows this committed handoff
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/16 (draft)
 - **Port:** ephemeral loopback HTTP test only; stopped
 - **Status:** closed (implementation complete; lead review pending)
 
