@@ -5,7 +5,7 @@
 - **Ledger:** 0016 · **Spec:** none (quick lane; context: docs/superpowers/specs/2026-11-19-x32-mixes-design.md)
 - **Branch:** orch/0016-x32-server-hardening · **Worktree:** created by T3
 - **Base commit:** 8790c29cb8ebf00d0671af53cc671e06a048e83b
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 Fix four small server issues from the PR #15 review (`gh pr view 15 --repo pepperhorn/ableton-control --comments`):
