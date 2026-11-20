@@ -11,3 +11,5 @@ export function monitorView({songs = [], play = {}, pos, transport, connected}) 
     current:current && {...current, name:current.name.replace(/^\* /, '')},
     next:next && {...next, name:next.name.replace(/^\* /, '')}, progress};
 }
+
+export function monitorCanLaunch({locked, connected, pages = []}) { return !locked && !!connected && pages.includes('scenes'); }

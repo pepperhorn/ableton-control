@@ -1,3 +1,6 @@
+import {sceneWindow,readSceneBar,saveSceneBar} from './scene-window.js';
+import {renderSceneWindow} from './scene-window-render.js';
+import {monitorCanLaunch} from './monitor-view.js';
 import {noSongsMessage} from './timing-view.js';
 import {createTransportRenderer} from './transport-render.js';
 import {createTapDetector} from './tap.js';
@@ -19,14 +22,33 @@ let receivedEmpty = false, timingState = null, timingRequest = false;
 let snapshot = false, initialPlay = false, transport = false, mixSnapshot = false;
 let mix = {returns:[],strips:[]}, mixState = initialMixState(prefs), mixJSON = null;
 let setJSON = null, indexProgress = null, transportState = null, playSnapshot = false, monitorSongs = [];
+if (state.page === 'monitor') state = {...state,locked:true};
+let sceneBarShown = true; try { sceneBarShown = readSceneBar(localStorage); } catch (_) {}
+function paintSceneBar() {
+  $('.scene-bar').hidden = !sceneBarShown;
+  $('.scene-bar-toggle').textContent = sceneBarShown ? 'Hide scenes' : 'Show scenes';
+  $('.scene-bar-toggle').setAttribute('aria-expanded',String(sceneBarShown));
+  const running = transportState ? !!transportState.is_playing : play.playing >= 0;
+  renderSceneWindow($('.scene-bar'),transport && playSnapshot && running ? sceneWindow({songs:monitorSongs,play,pos,before:0,after:2}) : null,{large:false,canLaunch:false,locked:true});
+}
+$('.scene-bar-toggle').onclick = () => { sceneBarShown = !sceneBarShown; try { saveSceneBar(localStorage,sceneBarShown); } catch (_) {} paintSceneBar(); };
 let monitorUI = null, monitorLoading = false;
-function paintMonitor() { if (monitorUI) monitorUI.render({songs:monitorSongs, play, pos, transport:transportState, connected:transport && playSnapshot}); }
+function paintMonitor() {
+  paintSceneBar();
+  if (monitorUI) monitorUI.render({songs:monitorSongs, play, pos, before:me.sceneWindow?.before, after:me.sceneWindow?.after,
+    transport:transportState, connected:transport && playSnapshot, locked:state.locked,
+    canLaunch:accessReady && me.pages.includes('scenes')});
+}
 function syncMonitor(active) {
   if (monitorUI) { monitorUI.setActive(active); paintMonitor(); return; }
   if (!active || monitorLoading) return;
   monitorLoading = true;
   import('./monitor-render.js').then(({createMonitorRenderer}) => {
-    monitorUI = createMonitorRenderer(); shell();
+    monitorUI = createMonitorRenderer({onLaunch:index => {
+      const row = document.querySelector(`.monitor-window [data-scene-index="${index}"]`);
+      const scene = monitorSongs.flatMap(s => s.rows).find(r => r.sceneIndex === index);
+      if (row && scene) { row.dataset.name = scene.name; launch(row); }
+    }}); shell();
   }).catch(() => { monitorLoading = false; status('Could not load Monitor. Reload to retry.'); });
 }
 const transportEnabled = new URLSearchParams(location.search).get('transport') === '1';
@@ -47,7 +69,11 @@ async function refreshMe() {
   const before = JSON.stringify({pages:me.pages,mixes:me.mixes});
   const oldPage = state.page, oldTab = mixState.tab;
   me = next; accessReady = true;
-  state = {...state,page:pageFor(state.page,me,mixSnapshot ? mix : null)};
+  const sceneForm = $('.admin-scene-settings');
+  for (const [key,value] of [['sceneBefore',me.sceneWindow?.before ?? 2],['sceneAfter',me.sceneWindow?.after ?? 2]])
+    if (!sceneForm.contains(document.activeElement)) sceneForm.elements[key].value=value;
+  const nextPage = pageFor(state.page,me,mixSnapshot ? mix : null);
+  state = {...state,page:nextPage,locked:nextPage === 'monitor' && oldPage !== 'monitor' ? true : state.locked};
   if (mixSnapshot) mixState = reduceMix(mixState,{type:'mix'},visibleMix());
   const changed = before !== JSON.stringify({pages:me.pages,mixes:me.mixes}) || oldPage !== state.page || oldTab !== mixState.tab;
   if (changed) { cancelGestures(); mixUI.render(); }
@@ -65,7 +91,13 @@ const transportUI = createTransportRenderer({
 function savePrefs() { try { localStorage.setItem('setlist-touch',JSON.stringify(prefsOf(state,{...mixState,page:state.page}))); } catch (_) {} }
 function shell() {
   const settingsOpen = location.hash === '#settings' && local || location.hash === '#admin';
-  if (accessReady) state = {...state,page:pageFor(state.page,me,mixSnapshot ? mix : null)};
+  if (accessReady) {
+    const nextPage = pageFor(state.page,me,mixSnapshot ? mix : null);
+    if (nextPage === 'monitor' && state.page !== 'monitor') state = {...state,locked:true};
+    state = {...state,page:nextPage};
+  }
+  $('.lock-toggle').textContent = state.locked ? '🔒 Locked' : 'Lock';
+  $('.lock-toggle').setAttribute('aria-pressed',String(state.locked));
   for (const button of document.querySelectorAll('.page-choice')) button.hidden = !allowedPages(me,mixSnapshot ? mix : null).includes(button.dataset.page);
   document.body.dataset.page = state.page;
   $('.setlist-main').hidden = settingsOpen || state.page !== 'scenes';
@@ -99,7 +131,11 @@ function shell() {
 function dispatchMix(action) {
   cancelGestures();
   // Page preference belongs to the shell; the existing mix reducer owns mix tabs.
-  if (action.type === 'page') state = {...state, page:pageFor(pageOf(action.page),me,mixSnapshot ? mix : null)};
+  if (action.type === 'page') {
+    const page = pageFor(pageOf(action.page),me,mixSnapshot ? mix : null);
+    state = {...state,page,locked:page === 'monitor' && state.page !== 'monitor' ? true : state.locked};
+    render(state,set,play,pos,local);
+  }
   mixState = reduceMix(mixState,action,visibleMix()); savePrefs(); mixUI.render(); shell();
 }
 function acceptMix(next) {
@@ -128,7 +164,9 @@ $('.now-playing-banner').addEventListener('click',()=>dispatch({type:'showPlayin
 let statusTimer;
 function status(text) { clearTimeout(statusTimer); $('.launch-status').textContent = text; statusTimer = setTimeout(()=>$('.launch-status').textContent='',3500); }
 async function launch(row) {
-  if (!accessReady || !allowedPages(me,mixSnapshot ? mix : null).includes('scenes') || location.hash === '#admin' || state.page !== 'scenes' || !canLaunch(state) || !row.isConnected) return;
+  const monitor = state.page === 'monitor' && row.closest('.monitor-window');
+  if (!accessReady || !me.pages.includes('scenes') || ['#admin','#settings'].includes(location.hash) || !row.isConnected ||
+    (monitor ? !monitorCanLaunch({locked:state.locked,connected:transport && playSnapshot,pages:me.pages}) : state.page !== 'scenes' || !canLaunch(state))) return;
   try {
     const res = await fetch('/api/fire',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sceneIndex:Number(row.dataset.sceneIndex),name:row.dataset.name})});
     if (res.status === 409) { row.classList.add('is-stale'); setTimeout(()=>row.classList.remove('is-stale'),1000); status('Set changed. Check the row and tap again.'); }
@@ -236,3 +274,13 @@ $('.timing-build').onclick = async () => {
   } catch (_) { showTiming({ok:false,message:'Connection lost. Check timing clips in Live before trying again.'}); }
   finally { timingRequest = false; shell(); }
 };
+
+$('.admin-scene-settings').addEventListener('submit',async e => {
+  e.preventDefault(); const form=e.currentTarget, button=form.querySelector('button'); button.disabled=true;
+  try {
+    const res=await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({sceneBefore:Number(form.elements.sceneBefore.value),sceneAfter:Number(form.elements.sceneAfter.value)})});
+    if(!res.ok)throw Error(await res.text());
+    $('.admin-scene-status').textContent='Saved.'; await refreshMe();
+  } catch(error) { $('.admin-scene-status').textContent=error.message; }
+  finally {button.disabled=false;}
+});

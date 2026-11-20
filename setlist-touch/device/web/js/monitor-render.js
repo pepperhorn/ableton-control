@@ -1,3 +1,5 @@
+import {sceneWindow} from './scene-window.js';
+import {renderSceneWindow} from './scene-window-render.js';
 import {monitorView} from './monitor-view.js';
 const $ = selector => document.querySelector(selector);
 function paintScene(node, scene) {
@@ -10,7 +12,7 @@ function paintScene(node, scene) {
   node.style.color = luminance > .179 ? '#000' : '#fff';
   node.querySelector('.monitor-scene-name').textContent = scene.name;
 }
-export function createMonitorRenderer() {
+export function createMonitorRenderer({onLaunch}) {
   const current = $('.monitor-current'), next = $('.monitor-next'), lines = $('.monitor-barlines');
   let timingKey = null, active = false, lock = null, pending = false;
   const wanted = () => active && !document.hidden;
@@ -35,7 +37,12 @@ export function createMonitorRenderer() {
       $('.monitor-song').hidden = !view.song;
       $('.monitor-status').textContent = view.status || '';
       $('.monitor-status').hidden = !view.status;
-      current.hidden = !view.current; next.hidden = !view.next;
+      const windowView = sceneWindow({...input,play:view.current ? input.play : {}});
+      renderSceneWindow($('.monitor-window'),windowView,{large:true,canLaunch:!!input.canLaunch,locked:input.locked,onLaunch});
+      for (const row of document.querySelectorAll('.monitor-window .scene-window-row')) row.classList.toggle('is-queued',Number(row.dataset.sceneIndex) === input.play.fired);
+      current.hidden = !!windowView || !view.current; next.hidden = !view.next || !!(windowView && windowView.rows.some(r => r.index === input.play.fired));
+      // When a raw scene exists outside a song, keep the original read-only state.
+
       paintScene(current, view.current); paintScene(next, view.next);
       const key = view.current ? `${view.current.loopBeats}:${view.current.beatsPerBar}` : null;
       if (key !== timingKey) {

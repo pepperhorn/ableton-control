@@ -35,7 +35,7 @@ export function createAccessRenderer({meOf, mixOf, refresh, status}) {
         input.onchange = () => { member[key] = input.checked ? [...member[key],value] : member[key].filter(v => v !== value); };
         wrap.append(input,document.createTextNode(label)); row.append(wrap);
       }
-      for (const page of ['monitor','scenes','transport']) permission(page,'pages',page);
+      for (const page of ['monitor','scenes','transport']) permission(page === 'scenes' ? 'Can launch scenes' : page,'pages',page);
       const names = mixOf().returns.map(r => r.name);
       for (const name of names) permission('Mix: ' + name,'mixes',name);
       for (const name of member.mixes.filter(n => !names.includes(n))) permission('Missing return: ' + name,'mixes',name,true);

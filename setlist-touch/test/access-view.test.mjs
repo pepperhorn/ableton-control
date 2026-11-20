@@ -19,6 +19,8 @@ test('orphaned mix permissions fall back to Monitor once the return snapshot is 
 
 // Run the real app shell with controlled network ordering, not a copy of its reducer.
 import vm from 'node:vm';
+import * as sceneView from '../device/web/js/scene-window.js';
+import * as monitorView from '../device/web/js/monitor-view.js';
 import * as viewState from '../device/web/js/view-state.js';
 import * as mixView from '../device/web/js/mix-view.js';
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
@@ -28,11 +30,12 @@ function shellHarness({local=false,prefs={page:'mix',tab:'Keith'},config={}}={})
  function node() {return {...target(),hidden:false,textContent:'',dataset:{},style:{},setAttribute(){},classList:{add(){},remove(){}}};}
  const get=selector=>{if(!nodes.has(selector))nodes.set(selector,node());return nodes.get(selector);};
  const form=get('.settings-form');form.elements=Object.fromEntries(['port','username','password','adminPassword','accessEnabled'].map(key=>[key,{name:key,value:key==='port'?'5290':key==='username'?'band':'',checked:false}]));
+ const sceneForm=get('.admin-scene-settings');sceneForm.contains=()=>false;sceneForm.elements={sceneBefore:{value:2},sceneAfter:{value:2}};
  const location={hostname:local?'localhost':'127.0.0.2',hash:'',search:'',port:'5290'};
  const document={...target(),querySelector:get,querySelectorAll:()=>[],body:{dataset:{}}};
  const full={kind:local?'admin':'open',accessEnabled:false,pages:['monitor','scenes','transport'],mixes:'all',members:[]};
  const events=target();
- const ctx={noSongsMessage,...viewState,...mixView,document,location,window:target(),URLSearchParams,ResizeObserver:class{observe(){}},
+ const ctx={...sceneView,...monitorView,renderSceneWindow(){},noSongsMessage,...viewState,...mixView,document,location,window:target(),URLSearchParams,ResizeObserver:class{observe(){}},
   localStorage:{getItem:()=>JSON.stringify(prefs),setItem:(k,v)=>storage.push(JSON.parse(v))},
   setTimeout:()=>0,clearTimeout(){},render(){},updatePlayback(){},fitSceneRows(){},
   createTapDetector:()=>({move(){}}),createTransportRenderer:()=>({syncAvailability(){},cancel(){},reset(){}}),

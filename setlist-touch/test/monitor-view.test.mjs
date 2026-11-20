@@ -42,3 +42,19 @@ test('disconnect clears current, queue, song and progress immediately', () => {
   a.deepEqual(monitorView({...base,connected:false,play:{...base.play,fired:2,next:current}}),
     {status:'Disconnected',song:'',current:null,next:null,progress:null});
 });
+
+// Uses the same tap detector and permission gate as Monitor's row binding.
+test('monitor tap launches only when unlocked and member has scenes', async () => {
+  const {monitorCanLaunch} = await import('../device/web/js/monitor-view.js');
+  const {createTapDetector} = await import('../device/web/js/tap.js');
+  const row={};const tap=createTapDetector();
+  for(const locked of [true,false]) {
+    tap.down(1,0,0,0,monitorCanLaunch({locked,connected:true,pages:['scenes']})?row:null);
+    a.equal(tap.up(1,0,0,10,row),locked?null:row);
+  }
+  a.equal(monitorCanLaunch({locked:false,connected:false,pages:['scenes']}),false);
+});
+test('monitor tap ignored for member without scenes even when unlocked', async () => {
+  const {monitorCanLaunch} = await import('../device/web/js/monitor-view.js');
+  a.equal(monitorCanLaunch({locked:false,connected:true,pages:['monitor']}),false);
+});
