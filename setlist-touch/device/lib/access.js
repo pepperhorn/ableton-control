@@ -1,17 +1,22 @@
 'use strict';
 const crypto = require('crypto');
+const validBus = n => Number.isInteger(n) && n >= 1 && n <= 16;
+const validSource = s => typeof s === 'string' && /^(ch\/(0[1-9]|[12][0-9]|3[0-2])|(?:auxin|fxrtn)\/0[1-8])$/.test(s);
 const pages = ['monitor','scenes','transport'];
 const text = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 200;
 function validMembers(members) {
   return Array.isArray(members) && members.length <= 100 && members.every(m => m && text(m.id) && text(m.name) &&
-    Array.isArray(m.pages) && m.pages.every(p => pages.includes(p)) && Array.isArray(m.mixes) && m.mixes.every(text)) &&
+    Array.isArray(m.pages) && m.pages.every(p => pages.includes(p)) && Array.isArray(m.mixes) && m.mixes.every(text) &&
+    (m.buses === undefined || Array.isArray(m.buses) && m.buses.every(validBus)) &&
+    (m.hidden === undefined || m.hidden && typeof m.hidden === 'object' && !Array.isArray(m.hidden) && Object.entries(m.hidden).every(([bus,ids]) => validBus(Number(bus)) && Array.isArray(ids) && ids.every(validSource)))) &&
     new Set(members.map(m => m.id)).size === members.length;
 }
 function normalizeAccess(cfg) {
   const absent = cfg.accessEnabled === undefined && cfg.members === undefined;
   const valid = typeof cfg.accessEnabled === 'boolean' && validMembers(cfg.members);
   return {...cfg, accessEnabled:absent ? false : valid ? cfg.accessEnabled : true,
-    members:valid ? cfg.members : [], adminPassword:typeof cfg.adminPassword === 'string' ? cfg.adminPassword : '',
+    mixSource:cfg.mixSource || ((Array.isArray(cfg.members) ? cfg.members : []).some(m => m && Array.isArray(m.mixes) && m.mixes.length) ? 'ableton' : 'x32'), x32Host:cfg.x32Host || null,
+    members:valid ? cfg.members.map(m => ({...m,buses:m.buses || [],hidden:m.hidden || {}})) : [], adminPassword:typeof cfg.adminPassword === 'string' ? cfg.adminPassword : '',
     secret:typeof cfg.secret === 'string' && /^[a-f0-9]{64}$/.test(cfg.secret) ? cfg.secret : crypto.randomBytes(32).toString('hex')};
 }
 function equal(a, b) { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && crypto.timingSafeEqual(x,y); }
@@ -54,9 +59,10 @@ function identify({trusted, cookie, now = Date.now()}, cfg) {
   if (cfg.accessEnabled === false) return member ? {kind:'open',member} : {kind:'open'};
   return member ? {kind:'member',member} : {kind:'none'};
 }
-function can(identity, action, returnName) {
+function can(identity, action, returnName, busFor = n => n) {
   if (identity.kind === 'admin' || identity.kind === 'open') return true;
   if (identity.kind !== 'member') return false;
+  if (action === 'busSend') return (identity.member.buses || []).some(n => busFor(n) === busFor(returnName));
   if (action === 'send') return identity.member.mixes.includes(returnName);
   return identity.member.pages.includes({fire:'scenes',transport:'transport'}[action]);
 }
@@ -64,11 +70,12 @@ function meFor(identity, cfg) {
   const full = identity.kind === 'admin' || identity.kind === 'open';
   return {accessEnabled:cfg.accessEnabled, kind:identity.kind, name:identity.member ? identity.member.name : null, link:identity.member ? '/' + slugFor(identity.member.name) : null,
     pages:full ? pages : identity.member ? identity.member.pages : ['monitor'],
+    mixSource:cfg.mixSource, buses:full ? 'all' : identity.member ? identity.member.buses || [] : [],
     mixes:full ? 'all' : identity.member ? identity.member.mixes : [],
     members:cfg.members.map(({id,name}) => ({id,name})),adminAvailable:!!cfg.adminPassword};
 }
 function newMember(name, returnNames) {
-  return {id:crypto.randomBytes(16).toString('hex'),name,pages:['monitor'],mixes:returnNames.filter(r => r.toLowerCase() === name.toLowerCase())};
+  return {id:crypto.randomBytes(16).toString('hex'),name,pages:['monitor'],buses:[],hidden:{},mixes:returnNames.filter(r => r.toLowerCase() === name.toLowerCase())};
 }
 function checkAdminPassword(given, cfg) { return !!cfg.adminPassword && typeof given === 'string' && equal(given,cfg.adminPassword); }
 module.exports = {memberToken,slugFor,reservedSlug,validSlugs,adminToken,validMembers,normalizeAccess,sign,verify,identify,can,meFor,newMember,checkAdminPassword};

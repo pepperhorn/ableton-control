@@ -4,6 +4,8 @@ const os = require('os');
 const {copyText} = require('./lib/clipboard');
 const {EventEmitter} = require('events');
 const {createApp} = require('./lib/app');
+const {createX32} = require('./lib/x32');
+const x32Socket = require('dgram').createSocket('udp4');
 const {loadConfig, saveConfig} = require('./lib/config');
 const bridge = new EventEmitter();
 let lastMix = {returns:[], tracks:[]};
@@ -135,10 +137,13 @@ function address(port) {
   max.outlet('url', `http://127.0.0.1:${port}/`);
 }
 bridge.addressChanged = address;
-const app = createApp({bridge, config:loadConfig(), saveConfig});
+const config = loadConfig();
+const x32 = createX32({socket:x32Socket,host:config.x32Host || null});
+const app = createApp({bridge,x32,config,saveConfig});
+x32Socket.bind(0,() => x32.start());
 app.listenWithFallback(app.getConfig().port).then(port => {
   address(port);
   // Node startup can finish after live.thisdevice; request a fresh snapshot.
   max.outlet('ready');
-}).catch(error => {startupFailed = true; phoneUrl = ''; lastAddress = error.message; indexing = false; panelStatus('address', lastAddress); max.post('Setlist Touch: ' + error.message);});
-process.on('SIGTERM', () => app.close().then(() => process.exit(0)));
+}).catch(error => {x32.stop(); x32Socket.close(); startupFailed = true; phoneUrl = ''; lastAddress = error.message; indexing = false; panelStatus('address', lastAddress); max.post('Setlist Touch: ' + error.message);});
+process.on('SIGTERM', () => { x32.stop(); x32Socket.close(); app.close().then(() => process.exit(0)); });
