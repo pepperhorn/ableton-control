@@ -10,7 +10,7 @@
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-a5b5ea0c-86ffa607eeb1ba70
 - **Base commit:** 7a618cca66a81154d79865e3a74ea29e0a900e66 (descends from required 109d71c)
 - **Implementation commit:** 3500976
-- **PR:** pending creation after this handoff commit
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/14
 - **Port:** 5353 (fixture server stopped after verification)
 - **Status:** closed
 
