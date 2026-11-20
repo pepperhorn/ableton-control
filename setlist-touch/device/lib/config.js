@@ -1,12 +1,12 @@
 'use strict';
 const fs = require('fs'), os = require('os'), path = require('path');
 const {normalizeAccess, validMembers} = require('./access');
-const DEFAULT_CONFIG = Object.freeze({port:8765, username:'band', password:'', sceneBefore:2, sceneAfter:2});
+const DEFAULT_CONFIG = Object.freeze({port:8765, username:'band', password:'', allowOpenLan:false, sceneBefore:2, sceneAfter:2});
 function configPath() { return path.join(os.homedir(), 'Documents', 'SetlistTouch', 'config.json'); }
 function sceneCount(value) { return Number.isInteger(value) && value >= 0 && value <= 8 ? value : 2; }
 function validConfig(cfg) {
   return cfg && Number.isInteger(cfg.port) && cfg.port > 0 && cfg.port <= 65535 &&
-    typeof cfg.username === 'string' && cfg.username.length > 0 && !/[:\r\n]/.test(cfg.username) && typeof cfg.password === 'string' && ['sceneBefore','sceneAfter'].every(k => cfg[k] === undefined || (Number.isInteger(cfg[k]) && cfg[k] >= 0 && cfg[k] <= 8));
+    typeof cfg.username === 'string' && cfg.username.length > 0 && !/[:\r\n]/.test(cfg.username) && typeof cfg.password === 'string' && (cfg.allowOpenLan === undefined || typeof cfg.allowOpenLan === 'boolean') && ['sceneBefore','sceneAfter'].every(k => cfg[k] === undefined || (Number.isInteger(cfg[k]) && cfg[k] >= 0 && cfg[k] <= 8));
 }
 function loadConfig(file = configPath()) {
   let raw, original, damaged = false, missing = false;

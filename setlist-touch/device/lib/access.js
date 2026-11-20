@@ -29,14 +29,29 @@ function verify(token, secret) {
 }
 function adminVersion(cfg) { return crypto.createHmac('sha256',cfg.secret).update('admin-password\0').update(cfg.adminPassword).digest('hex'); }
 function adminToken(cfg) { return {kind:'admin',v:adminVersion(cfg),exp:Date.now() + 31536000000}; }
-function identify({trusted, cookie}, cfg) {
-  if (trusted) return {kind:'admin'};
-  const token = (cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('st_id='));
-  const payload = verify(token && token.slice(6),cfg.secret);
-  if (payload && payload.kind === 'admin' && cfg.adminPassword && typeof payload.v === 'string' &&
-      Number.isSafeInteger(payload.exp) && payload.exp > Date.now() && equal(payload.v,adminVersion(cfg))) return {kind:'admin'};
-  if (cfg.accessEnabled === false) return {kind:'open'};
-  const member = payload && payload.kind === 'member' && cfg.members.find(m => m.id === payload.memberId);
+const MEMBER_AGE = 86400000;
+function memberToken(member, now = Date.now()) { return {kind:'member',memberId:member.id,exp:now + MEMBER_AGE}; }
+function slugFor(name) { return name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+// Device web assets are static for the lifetime of this server process.
+const reservedStaticSlugs = new Set(require('fs').readdirSync(require('path').join(__dirname,'../web')).flatMap(name => [name,slugFor(name)]));
+const reservedRoutes = new Set(['', 'admin','api','js','css','fonts','settings','diagnostic','touch-test']);
+function reservedSlug(slug) { return reservedRoutes.has(slug) || reservedStaticSlugs.has(slug); }
+function validSlugs(members) {
+  const slugs = members.map(m => slugFor(m.name));
+  return slugs.every(s => !reservedSlug(s)) && new Set(slugs).size === slugs.length;
+}
+function identify({trusted, cookie, now = Date.now()}, cfg) {
+  const read = name => {
+    const value = (cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith(name+'='));
+    return verify(value && value.slice(name.length+1),cfg.secret);
+  };
+  const payload = read('st_id');
+  const memberOf = p => p && p.kind === 'member' && Number.isSafeInteger(p.exp) && p.exp > now && cfg.members.find(m => m.id === p.memberId);
+  const admin = trusted || payload && payload.kind === 'admin' && cfg.adminPassword && typeof payload.v === 'string' &&
+    Number.isSafeInteger(payload.exp) && payload.exp > now && equal(payload.v,adminVersion(cfg));
+  const member = (admin ? memberOf(read('st_who')) || memberOf(payload) : memberOf(payload)) || (cfg.accessEnabled === false && memberOf(read('st_who')));
+  if (admin) return member ? {kind:'admin',member} : {kind:'admin'};
+  if (cfg.accessEnabled === false) return member ? {kind:'open',member} : {kind:'open'};
   return member ? {kind:'member',member} : {kind:'none'};
 }
 function can(identity, action, returnName) {
@@ -47,7 +62,7 @@ function can(identity, action, returnName) {
 }
 function meFor(identity, cfg) {
   const full = identity.kind === 'admin' || identity.kind === 'open';
-  return {accessEnabled:cfg.accessEnabled, kind:identity.kind, name:identity.member ? identity.member.name : null,
+  return {accessEnabled:cfg.accessEnabled, kind:identity.kind, name:identity.member ? identity.member.name : null, link:identity.member ? '/' + slugFor(identity.member.name) : null,
     pages:full ? pages : identity.member ? identity.member.pages : ['monitor'],
     mixes:full ? 'all' : identity.member ? identity.member.mixes : [],
     members:cfg.members.map(({id,name}) => ({id,name})),adminAvailable:!!cfg.adminPassword};
@@ -56,7 +71,7 @@ function newMember(name, returnNames) {
   return {id:crypto.randomBytes(16).toString('hex'),name,pages:['monitor'],mixes:returnNames.filter(r => r.toLowerCase() === name.toLowerCase())};
 }
 function checkAdminPassword(given, cfg) { return !!cfg.adminPassword && typeof given === 'string' && equal(given,cfg.adminPassword); }
-module.exports = {adminToken,validMembers,normalizeAccess,sign,verify,identify,can,meFor,newMember,checkAdminPassword};
+module.exports = {memberToken,slugFor,reservedSlug,validSlugs,adminToken,validMembers,normalizeAccess,sign,verify,identify,can,meFor,newMember,checkAdminPassword};
 
 // Return lookup only; stored permission names remain the exact Live readback.
 function matchReturn(returns, name) {

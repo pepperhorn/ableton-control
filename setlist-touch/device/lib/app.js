@@ -1,7 +1,7 @@
 'use strict';
 const {randomBytes} = require('crypto');
 const http = require('http'), fs = require('fs'), path = require('path');
-const {matchReturn,adminToken, normalizeAccess, validMembers, sign, identify, can, meFor, newMember, checkAdminPassword} = require('./access');
+const {slugFor,reservedSlug,validSlugs,memberToken,matchReturn,adminToken, normalizeAccess, validMembers, sign, identify, can, meFor, newMember, checkAdminPassword} = require('./access');
 const {parseSet} = require('./parse-set');
 const {progress} = require('./progress');
 const {parseMix} = require('./parse-mix');
@@ -56,11 +56,11 @@ function failureSummary(failures) {
   return runs.map(run => (run.first === run.last ? 'Port ' + run.first : 'Ports ' + run.first + '–' + run.last) + ': ' + run.reason).join('; ');
 }
 function createApp({bridge, config = loadConfig(), saveConfig = persist,
-  probe = probeLoopback, webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress}) {
+  probe = probeLoopback, webRoot = path.join(__dirname, '../web'), remoteAddressOf = req => req.socket.remoteAddress, now = Date.now}) {
   const configWarning = config.configWarning;
   const nonce = randomBytes(24).toString('hex');
   let portNote = '';
-  let cfg = {...normalizeAccess(config),sceneBefore:sceneCount(config.sceneBefore),sceneAfter:sceneCount(config.sceneAfter)}, parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
+  let cfg = {...normalizeAccess(config),allowOpenLan:config.allowOpenLan === true,sceneBefore:sceneCount(config.sceneBefore),sceneAfter:sceneCount(config.sceneAfter)}, parsed = parseSet([]), play = {playing:-1, fired:-1, playingSongId:null, current:null, next:null}, pos = null;
   let active, lastPos = 0, pendingPos, posTimer, closed = false, changing = false;
   let building = false, timing = null;
   function onTimingProgress(value) { if (building && value && Number.isInteger(value.done) && Number.isInteger(value.total) && value.done >= 0 && value.total >= value.done) { timing = {...value,running:true}; broadcast("timing",timing); } }
@@ -194,7 +194,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
     res.writeHead(status, {'Content-Type':type, 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'}); res.end(body);
   }
   function json(res, data) { reply(res, 200, JSON.stringify(data), 'application/json'); }
-  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password, sceneBefore:cfg.sceneBefore,sceneAfter:cfg.sceneAfter, ...(configWarning ? {configWarning} : {}), ...(portNote ? {portNote} : {}), ...(cfg.accessEnabled || cfg.adminPassword || cfg.members.length ? {hasAdminPassword:!!cfg.adminPassword,accessEnabled:cfg.accessEnabled} : {})}; }
+  function publicConfig() { return {port:cfg.port, username:cfg.username, hasPassword:!!cfg.password, allowOpenLan:cfg.allowOpenLan, sceneBefore:cfg.sceneBefore,sceneAfter:cfg.sceneAfter, ...(configWarning ? {configWarning} : {}), ...(portNote ? {portNote} : {}), ...(cfg.accessEnabled || cfg.adminPassword || cfg.members.length ? {hasAdminPassword:!!cfg.adminPassword,accessEnabled:cfg.accessEnabled} : {})}; }
   async function body(req) {
     if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) throw new Error('Expected JSON');
     let text = '';
@@ -209,27 +209,35 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
       const access = authorize({remoteAddress, host:req.headers.host, authorization:req.headers.authorization}, cfg);
       if (access === 'challenge') { res.setHeader('WWW-Authenticate', 'Basic realm="Setlist Touch"'); return reply(res, 401, 'Authentication required'); }
       if (access === 'forbidden') return reply(res, 403, 'Set a password in Setlist Touch settings on the laptop.');
-      if (req.method === 'POST' && req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) return reply(res, 403, 'Invalid origin');
+      if (['POST','PUT'].includes(req.method) && req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) return reply(res, 403, 'Invalid origin');
       const trusted = isTrustedLoopback(remoteAddress, req.headers.host);
-      const identityOf = () => identify({trusted, cookie:req.headers.cookie},cfg);
+      const identityOf = () => identify({trusted, cookie:req.headers.cookie,now:now()},cfg);
       const identity = identityOf();
       const route = req.url.split('?')[0];
-      const cookie = payload => res.setHeader('Set-Cookie', 'st_id=' + (payload ? sign(payload,cfg.secret) : '') + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + (payload ? 31536000 : 0));
+      const cookie = (payload, name = 'st_id') => {
+        const value = name + '=' + (payload ? sign(payload,cfg.secret) : '') + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + (payload ? payload.kind === 'member' ? 86400 : 31536000 : 0);
+        res.setHeader('Set-Cookie',[...(res.getHeader('Set-Cookie') || []),value]);
+      };
+      const choose = member => cookie(memberToken(member,now()),identity.kind === 'admin' ? 'st_who' : 'st_id');
       if (route === '/api/me' && req.method === 'GET') return json(res, {...meFor(identity,cfg),sceneWindow:{before:cfg.sceneBefore,after:cfg.sceneAfter}});
-      if (route === '/api/forget' && req.method === 'POST') { cookie(null); return reply(res,204); }
+      if (route === '/api/forget' && req.method === 'POST') {
+        if (identify({cookie:req.headers.cookie,now:now()},cfg).kind !== 'admin') cookie(null);
+        cookie(null,'st_who'); return reply(res,204);
+      }
       if (route === '/api/identify' && req.method === 'POST') {
         let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
         const member = cfg.members.find(m => m.id === (value || {}).memberId);
         if (!member) return reply(res,404,'Unknown member');
-        cookie({kind:'member',memberId:member.id}); return reply(res,204);
+        choose(member); return reply(res,204);
       }
       if (route === '/api/admin-login' && req.method === 'POST') {
-        const now = Date.now();
-        if (now - (loginAttempts.get(remoteAddress) || 0) < 1000) return reply(res,429,'Try again in a second');
-        for (const [address,time] of loginAttempts) if (now - time >= 1000) loginAttempts.delete(address);
-        loginAttempts.set(remoteAddress,now);
+        const loginNow = Date.now();
+        if (loginNow - (loginAttempts.get(remoteAddress) || 0) < 1000) return reply(res,429,'Try again in a second');
+        for (const [address,time] of loginAttempts) if (loginNow - time >= 1000) loginAttempts.delete(address);
+        loginAttempts.set(remoteAddress,loginNow);
         let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
         if (!checkAdminPassword((value || {}).password,cfg)) return reply(res,403,'Incorrect admin password');
+        if (identity.member) cookie(memberToken(identity.member,now()),'st_who');
         cookie(adminToken(cfg)); return reply(res,204);
       }
       if (route === '/api/timing-clips' && req.method === 'POST') {
@@ -258,6 +266,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
           if (value && typeof value.name === 'string' && typeof value.sendName === 'string') value = {...value,name:value.name.trim(),sendName:value.sendName.trim()};
           if (!value || !['name','sendName'].every(k => typeof value[k] === 'string' && value[k].trim() && value[k].length <= 200) || !['typeId','channelId'].every(k => typeof value[k] === 'string' && value[k].length <= 200)) return reply(res,400,'Invalid player');
           if ((!transport || transport.is_playing) && value.confirmPlaying !== true) return reply(res,409,'Live is playing. Confirm adding the player while playing.');
+          if (!validSlugs([...cfg.members.filter(m => m.name.trim().toLowerCase() !== value.name.toLowerCase()),{name:value.name}])) return reply(res,400,"That name can't be used for a link");
           if (adding || changing) return reply(res,409,'A player or settings change is already in progress');
           adding = true; changing = true;
           let timer;
@@ -284,6 +293,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
             member.name = member.name.trim();
             if (!member.mixes.includes(result.returnName)) member.mixes.push(result.returnName);
             if (!validMembers(members)) return reply(res,409,'Member limit reached; return remains in Live');
+            if (!validSlugs(members)) return reply(res,409,"That name can't be used for a link; return remains in Live");
             const next = {...cfg,members,accessEnabled:cfg.accessEnabled || cfg.members.length === 0};
             await saveConfig(next); cfg = next; broadcast('access',null); return json(res,{returnName:result.returnName,routeKept:result.routeKept === true});
           } catch (e) { return reply(res,409,e.message.replace(/[.\s]+$/g,'') + '. No member was added. Check the return in Live.'); }
@@ -302,7 +312,12 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
       if (route === '/api/members') {
         // Open access is not authority to administer the band from a phone.
         if (identity.kind !== 'admin') return reply(res,403,'Admin required');
-        if (req.method === 'GET') return json(res,cfg.members.map(m => ({...m,orphanMixes:m.mixes.filter(name => !mix.returns.some(r => r.name === name))})));
+        if (req.method === 'GET') {
+          // Match the device panel's first external IPv4, including its actual bound port.
+          const ip = Object.values(require('os').networkInterfaces()).flat().find(i => (i.family === 'IPv4' || i.family === 4) && !i.internal);
+          const origin = `http://${ip ? ip.address : '127.0.0.1'}:${req.socket.localPort}`;
+          return json(res,cfg.members.map(m => ({...m,link:'/' + slugFor(m.name),url:origin + '/' + slugFor(m.name),orphanMixes:m.mixes.filter(name => !mix.returns.some(r => r.name === name))})));
+        }
         if (req.method === 'POST') {
           let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
           if (!value || !Array.isArray(value.members)) return reply(res,400,'Invalid members');
@@ -312,6 +327,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
             return {id:m.id || defaults.id,name:m.name,pages:m.pages === undefined ? defaults.pages : m.pages,mixes:m.mixes === undefined ? defaults.mixes : m.mixes};
           });
           if (!validMembers(members)) return reply(res,400,'Invalid members');
+          if (!validSlugs(members)) return reply(res,400,"That name can't be used for a link");
           if (changing) return reply(res,409,'Settings are being changed');
           changing = true;
           try {
@@ -361,11 +377,12 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
         if (req.method === 'GET') return json(res,{sceneBefore:cfg.sceneBefore,sceneAfter:cfg.sceneAfter});
         if (req.method === 'POST' || req.method === 'PUT') {
           let value; try { value = await body(req); } catch (_) { return reply(res,400,'Invalid JSON'); }
-          if (!value || !validConfig({...cfg,sceneBefore:value.sceneBefore === undefined ? cfg.sceneBefore : value.sceneBefore,sceneAfter:value.sceneAfter === undefined ? cfg.sceneAfter : value.sceneAfter})) return reply(res,400,'Invalid scene window');
+          if (value && value.allowOpenLan !== undefined && !trusted) return reply(res,403,'Settings are only available on the laptop.');
+          if (!value || !validConfig({...cfg,...(value.allowOpenLan !== undefined ? {allowOpenLan:value.allowOpenLan} : {}),sceneBefore:value.sceneBefore === undefined ? cfg.sceneBefore : value.sceneBefore,sceneAfter:value.sceneAfter === undefined ? cfg.sceneAfter : value.sceneAfter})) return reply(res,400,'Invalid scene window');
           if (changing) return reply(res,409,'Settings are being changed');
           changing = true;
           try {
-            const next = {...cfg,sceneBefore:value.sceneBefore === undefined ? cfg.sceneBefore : value.sceneBefore,sceneAfter:value.sceneAfter === undefined ? cfg.sceneAfter : value.sceneAfter};
+            const next = {...cfg,...(value.allowOpenLan !== undefined ? {allowOpenLan:value.allowOpenLan} : {}),sceneBefore:value.sceneBefore === undefined ? cfg.sceneBefore : value.sceneBefore,sceneAfter:value.sceneAfter === undefined ? cfg.sceneAfter : value.sceneAfter};
             await saveConfig(next); cfg = next; broadcast('access',null);
             return json(res,{sceneBefore:cfg.sceneBefore,sceneAfter:cfg.sceneAfter});
           } catch (_) { return reply(res,400,'Could not save settings'); }
@@ -380,7 +397,7 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
           if (!validConfig(value)) return reply(res, 400, 'Invalid port or credentials');
           if (value.password === '') value.password = cfg.password;
           if (value.accessEnabled !== undefined && typeof value.accessEnabled !== 'boolean' || value.adminPassword !== undefined && typeof value.adminPassword !== 'string') return reply(res,400,'Invalid access settings');
-          value = {...cfg, sceneBefore:value.sceneBefore === undefined ? cfg.sceneBefore : value.sceneBefore, sceneAfter:value.sceneAfter === undefined ? cfg.sceneAfter : value.sceneAfter, port:value.port,username:value.username,password:value.password,
+          value = {...cfg, sceneBefore:value.sceneBefore === undefined ? cfg.sceneBefore : value.sceneBefore, sceneAfter:value.sceneAfter === undefined ? cfg.sceneAfter : value.sceneAfter, port:value.port,username:value.username,password:value.password,allowOpenLan:value.allowOpenLan === undefined ? cfg.allowOpenLan : value.allowOpenLan,
             adminPassword:value.adminPassword || cfg.adminPassword, accessEnabled:value.accessEnabled === undefined ? cfg.accessEnabled : value.accessEnabled};
           if (changing) return reply(res, 409, 'Settings are being changed');
           changing = true;
@@ -406,6 +423,11 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
       if (route.startsWith('/api/') || req.method !== 'GET') return reply(res, 404);
       let decoded; try { decoded = decodeURIComponent(route); } catch (_) { return reply(res, 404); }
       if (decoded.includes('\\') || decoded.includes('\0') || decoded.split('/').includes('..')) return reply(res, 404);
+      if (/^\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(decoded) && !reservedSlug(decoded.slice(1))) {
+        const member = cfg.members.find(m => slugFor(m.name) === decoded.slice(1));
+        if (member) { choose(member); res.setHeader('Location','/'); return reply(res,302); }
+        decoded = '/';
+      }
       const root = await fs.promises.realpath(webRoot);
       const file = path.resolve(root, '.' + (decoded === '/' ? '/index.html' : decoded));
       if (!file.startsWith(root + path.sep)) return reply(res, 404);

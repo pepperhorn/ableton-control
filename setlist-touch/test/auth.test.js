@@ -19,3 +19,8 @@ test('loopback bypass requires an exact local Host hostname',()=>{
  }
 });
 test('config missing, corrupt, roundtrip and default path',t=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'setlist-config-'));t.after(()=>fs.rmSync(dir,{recursive:true}));const p=path.join(dir,'nested/config.json');a.deepEqual(loadConfig(p),DEFAULT_CONFIG);saveConfig(cfg,p);a.deepEqual(loadConfig(p),{...DEFAULT_CONFIG,...cfg});fs.writeFileSync(p,'broken');a.deepEqual(loadConfig(p),DEFAULT_CONFIG);a.equal(configPath(),path.join(os.homedir(),'Documents','SetlistTouch','config.json'));});
+
+test('blank password + allowOpenLan lets LAN in only with explicit true',()=>{
+ for(const allowOpenLan of [undefined,false,'true',true])a.equal(authorize({remoteAddress:'192.168.1.20'},{...cfg,password:'',allowOpenLan}),allowOpenLan===true?'ok':'forbidden');
+ a.equal(authorize({remoteAddress:'192.168.1.20'},{...cfg,allowOpenLan:true}),'challenge');
+});

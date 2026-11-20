@@ -64,6 +64,10 @@ None.
 ---
 ## Receiver ack
 
+I will implement Task 3 identity expiry, personal links, logout and the explicit open-LAN switch, plus the two bounded Task 2 scene fixes. I will change only the assigned runtime/UI files, CSS, their tests and my handoffs; preserve admin permission independently of display identity; verify the full suite, device build and both browser sizes; then push this branch and open a draft PR. No open questions. GBrain search returned no task-specific evidence (coverage degraded); repo spec and plan govern.
+
+R2 ack: apply the lead's PR #14 decisions: required picker only for kind none, persistent optional dismissal, automatic suppression on loopback/jweb with header opt-in, accurate post-Live slug error, 403-only identity refresh and cached reserved static paths. Existing-name clash warnings remain deferred; no ledger edits.
+
 ---
 ## Return
 (write in …--codex-to-lead.md)

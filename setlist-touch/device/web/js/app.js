@@ -11,6 +11,13 @@ import {render, updatePlayback, fitSceneRows} from './render.js';
 const $ = selector => document.querySelector(selector);
 const local = ['localhost','127.0.0.1','[::1]','::1'].includes(location.hostname);
 let me = {kind:local ? 'admin' : 'none',accessEnabled:!local,pages:local ? ['monitor','scenes','transport'] : ['monitor'],mixes:local ? 'all' : [],members:[],adminAvailable:false};
+const apiFetch = window.fetch ? window.fetch.bind(window) : fetch;
+async function accessFetch(url, options) {
+  const res = await apiFetch(url,options);
+  if (res.status === 403 && typeof url === 'string' && url.startsWith('/api/') && url !== '/api/me' && accessLoaded && (me.kind === 'member' || me.kind === 'open' && me.name)) await refreshMe();
+  return res;
+}
+if (window.fetch) window.fetch = accessFetch;
 let accessReady = local, accessLoaded = false, accessSequence = 0, accessSettingDirty = false;
 // Load the access interface independently; the laptop remains usable if it fails.
 let allowedPages = () => local ? ['scenes','mix','monitor'] : ['monitor'];
@@ -46,8 +53,7 @@ function syncMonitor(active) {
   import('./monitor-render.js').then(({createMonitorRenderer}) => {
     monitorUI = createMonitorRenderer({onLaunch:index => {
       const row = document.querySelector(`.monitor-window [data-scene-index="${index}"]`);
-      const scene = monitorSongs.flatMap(s => s.rows).find(r => r.sceneIndex === index);
-      if (row && scene) { row.dataset.name = scene.name; launch(row); }
+      if (row) launch(row);
     }}); shell();
   }).catch(() => { monitorLoading = false; status('Could not load Monitor. Reload to retry.'); });
 }
@@ -238,13 +244,13 @@ async function settings() {
     const warning=$('.settings-config-warning');warning.hidden=!cfg.configWarning;
     warning.textContent=cfg.configWarning ? 'Damaged config.json detected at startup. Current settings may be missing members and passwords. ' +
       (cfg.configWarning.backupAvailable ? 'A recovery copy is kept in config.json.damaged. Repair the original file and restart Setlist Touch before saving, or restore missing settings from the copy.' : 'Could not create a recovery copy of the current file. Copy config.json somewhere safe, repair it and restart Setlist Touch before saving; saving replaces its damaged contents.') : '';
-    for(const name of ['port','username'])$('.settings-form').elements[name].value=cfg[name];const password=$('.settings-form').elements.password;password.value='';accessSettingDirty=false;$('.settings-form').elements.accessEnabled.checked=!!cfg.accessEnabled;password.placeholder=cfg.hasPassword?'Password set — leave blank to keep':'Set a password';}
+    for(const name of ['port','username'])$('.settings-form').elements[name].value=cfg[name];const password=$('.settings-form').elements.password;password.value='';accessSettingDirty=false;$('.settings-form').elements.accessEnabled.checked=!!cfg.accessEnabled;$('.settings-form').elements.allowOpenLan.checked=!!cfg.allowOpenLan;password.placeholder=cfg.hasPassword?'Password set — leave blank to keep':'Set a password';}
   catch(_){$('.settings-status').textContent='Could not load settings.';}
 }
 $('.settings-form').addEventListener('change',e=>{if(e.target.name==='accessEnabled')accessSettingDirty=true;});
 window.addEventListener('hashchange',settings);settings();
 $('.settings-form').addEventListener('submit',async e=>{
-  e.preventDefault();const form=e.currentTarget;const cfg={port:Number(form.elements.port.value),username:form.elements.username.value,password:form.elements.password.value,adminPassword:form.elements.adminPassword.value,...(accessSettingDirty ? {accessEnabled:form.elements.accessEnabled.checked} : {})};
+  e.preventDefault();const form=e.currentTarget;const cfg={port:Number(form.elements.port.value),username:form.elements.username.value,password:form.elements.password.value,allowOpenLan:form.elements.allowOpenLan.checked,adminPassword:form.elements.adminPassword.value,...(accessSettingDirty ? {accessEnabled:form.elements.accessEnabled.checked} : {})};
   const button=$('.settings-save');button.disabled=true;
   try {const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});if(!res.ok)throw new Error(await res.text());accessSettingDirty=false;$('.settings-status').textContent='Saved.';if(cfg.port!==Number(location.port||80))location.href=`http://${location.hostname}:${cfg.port}/${location.search}#settings`;}
   catch(error){$('.settings-status').textContent=error.message||'Could not save settings.';}
