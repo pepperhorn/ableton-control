@@ -41,7 +41,7 @@ export function createX32Renderer({x32Of,stateOf,viewOf,meOf,status}) {
     cancel();const state=x32Of(),tabs=$('.send-tabs'),list=$('.mix-list');tabs.replaceChildren();list.replaceChildren();list.classList.add('mix-strips');
     $('.mix-hint').textContent='Slide up/down to adjust · swipe sideways to browse';
     const buses=x32Tabs(state);if(!buses.some(b=>b.bus===bus) && !(state.unavailableBuses || []).includes(bus))bus=buses[0]?.bus || state.unavailableBuses?.[0] || null;
-    for(const b of [...buses,...(state.unavailableBuses || []).map(bus=>({bus,name:`Bus ${bus} not available`}))]) {
+    for(const b of [...buses,...(state.unavailableBuses || []).map(bus=>({bus,name:`Bus ${bus}${state.status?.state==='connected' ? ' not available' : ''}`}))]) {
       const tab=el('button','send-tab'+(b.bus===bus?' is-active':''),b.name || `Bus ${b.bus}`);tab.type='button';tab.setAttribute('aria-pressed',String(b.bus===bus));tab.onclick=()=>{bus=b.bus;render();};tabs.append(tab);
     }
     const message=x32Message(state,bus);

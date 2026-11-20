@@ -114,7 +114,8 @@ function shell() {
   $('.monitor-page').hidden = settingsOpen || state.page !== 'monitor';
   $('.transport-bar').hidden = settingsOpen || !transportEnabled || !me.pages.includes('transport') || state.page === 'monitor';
   syncMonitor(!settingsOpen && state.page === 'monitor');
-  const ready = state.page === 'monitor' ? playSnapshot : state.page === 'mix' ? me.mixSource==='x32' ? x32.status?.state==='connected' : mixSnapshot && visibleMix().returns.length > 0 : snapshot;
+  // The banner tracks Live; the X32 renderer owns desk connection status.
+  const ready = state.page === 'monitor' ? playSnapshot : state.page === 'mix' ? me.mixSource==='x32' || mixSnapshot && visibleMix().returns.length > 0 : snapshot;
   const indexing = transport && indexProgress && indexProgress.done < indexProgress.total;
   $('.connection-bar').hidden = transport && ready && !indexing;
   $('.connection-label').hidden = !!indexing;
@@ -209,7 +210,13 @@ events.addEventListener('open',()=>{refreshMe().catch(()=>status('Could not load
 events.addEventListener('error',()=>{transportState=null;playSnapshot=false;transportUI.reset();transport=false;receivedEmpty=false;snapshot=false;mixSnapshot=false;dispatch({type:'connected',value:false});});
 events.addEventListener('transport',e=>{transportState=JSON.parse(e.data);transportUI.accept(transportState);paintMonitor();});
 events.addEventListener('mix',e=>acceptMix(JSON.parse(e.data)));
-events.addEventListener('x32',e=>{x32=JSON.parse(e.data);mixUI.render();shell();accessUI.render();});
+events.addEventListener('x32',e=>{
+  const previousSource=x32.mixSource;
+  x32=JSON.parse(e.data);
+  // Desk updates must not rebuild Ableton rows or cancel their active gestures.
+  if(x32.mixSource==='x32' || previousSource!==x32.mixSource)mixUI.render();
+  shell();accessUI.render();
+});
 events.addEventListener('x32level',e=>{const level=JSON.parse(e.data);if(!x32.levels[level.bus])x32.levels[level.bus]={};x32.levels[level.bus][level.source]={value:level.value,label:level.label};if(x32.mixSource==='x32')mixUI.updateLevels(level);});
 events.addEventListener('level',e=>{
   const level=JSON.parse(e.data), strip=mix.strips.find(s=>s.trackIndex===level.trackIndex);

@@ -23,7 +23,7 @@ function harness() {
   vm.runInNewContext(source+'\nglobalThis.create=createX32Renderer;',ctx);
   const ui=ctx.create({x32Of:()=>state,stateOf:()=>shell,viewOf:()=>({page:'mix'}),meOf:()=>({name:'Shaun'}),status(){}});ui.render();
   function event(type,x,y){const slider=list.querySelector('.mix-strip-fader');listeners[type]({pointerId:1,button:0,target:slider,clientX:x,clientY:y});}
-  return {state,shell,ui,list,sent,event,flush:async()=>{for(const [id,fn] of [...timers]){timers.delete(id);await fn();}}};
+  return {state,shell,ui,list,tabs,sent,event,flush:async()=>{for(const [id,fn] of [...timers]){timers.delete(id);await fn();}}};
 }
 test('desk loss mid-drag cancels queued write and release; reconnect sends nothing',async()=>{
   const h=harness();h.event('pointerdown',0,100);h.event('pointermove',0,50);h.state.status.state='lost';h.ui.render();h.event('pointerup',0,50);await h.flush();a.equal(h.sent.length,0);a.equal(h.list.querySelector('.mix-strip-fader').getAttribute('aria-disabled'),'true');a.equal(h.list.querySelector('.mix-x32-overlay').textContent,'X32 not connected');h.state.status.state='connected';h.ui.render();await h.flush();a.equal(h.sent.length,0);
@@ -32,4 +32,16 @@ test('renderer sends vertical relative drag, refuses tap, horizontal and locked 
   const h=harness();for(const [x,y] of [[2,102],[40,102]]){h.event('pointerdown',0,100);h.event('pointermove',x,y);h.event('pointerup',x,y);await h.flush();}a.equal(h.sent.length,0);
   h.event('pointerdown',0,100);h.event('pointermove',0,50);h.event('pointerup',0,50);await h.flush();a.deepEqual(h.sent,[{bus:5,source:'master',value:0.75}]);
   h.shell.locked=true;h.ui.syncAvailability();h.event('pointerdown',0,100);h.event('pointermove',0,0);h.event('pointerup',0,0);await h.flush();a.equal(h.sent.length,1);
+});
+
+
+test('lost member bus keeps neutral tab and disconnected overlay; unavailable applies only when connected',()=>{
+  const h=harness();h.state.buses=[];h.state.unavailableBuses=[5];
+  for(const state of ['lost','searching']) {
+    h.state.status.state=state;h.ui.render();
+    a.equal(h.tabs.children[0].textContent,'Bus 5');
+    a.equal(h.list.querySelector('.mix-x32-overlay').textContent,state==='lost'?'X32 not connected':'Searching for X32…');
+    a.equal(h.list.querySelectorAll('.mix-strip').length,0);
+  }
+  h.state.status.state='connected';h.ui.render();a.equal(h.tabs.children[0].textContent,'Bus 5 not available');a.equal(h.list.querySelector('.mix-x32-overlay').textContent,'Bus 5 not available');
 });
