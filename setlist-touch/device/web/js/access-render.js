@@ -4,8 +4,10 @@ const $ = s => document.querySelector(s);
 function el(tag, cls, text) { const node = document.createElement(tag); node.className = cls; if (text !== undefined) node.textContent = text; return node; }
 export function createAccessRenderer({meOf, mixOf, refresh, status}) {
   const playerUI = createPlayerRenderer({refresh:async () => { loaded = false; await refresh(); }});
-  let draft = [], loaded = false, dismissed = false;
-  try { dismissed = sessionStorage.getItem('st.pickerDismissed') === '1'; } catch (_) {}
+  let draft = [], loaded = false, dismissed = false, requested = false;
+  // The Live jweb panel loads the loopback URL; never auto-prompt its operator.
+  const local = /^(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)$/i.test(location.hostname);
+  try { dismissed = localStorage.getItem('st.pickerDismissed') === '1'; } catch (_) {}
   async function post(route, body) {
     const res = await fetch(route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if (!res.ok) throw new Error(await res.text());
@@ -13,17 +15,17 @@ export function createAccessRenderer({meOf, mixOf, refresh, status}) {
   }
   async function act(fn) { try { await fn(); } catch (e) { status(e.message); } }
   function picker() {
-    const me = meOf(), panel = $('.name-picker'); panel.hidden = location.hash === '#admin' || location.hash === '#settings' || !showPicker(me,dismissed);
-    $('.name-dismiss').hidden = !!me.accessEnabled;
+    const me = meOf(), panel = $('.name-picker'); panel.hidden = location.hash === '#admin' || location.hash === '#settings' || !showPicker(me,dismissed,{local,requested});
+    $('.name-dismiss').hidden = me.kind === 'none';
     $('.member-name').textContent = me.name || '';
     $('.member-logout').hidden = !me.name;
     const list = $('.name-choices'); list.replaceChildren();
     for (const m of me.members) {
       const button = el('button','name-choice',m.name); button.type = 'button';
-      button.onclick = () => act(async () => { await post('/api/identify',{memberId:m.id}); await refresh(); }); list.append(button);
+      button.onclick = () => act(async () => { await post('/api/identify',{memberId:m.id}); requested = false; await refresh(); }); list.append(button);
     }
     $('.name-admin').hidden = !me.adminAvailable;
-    $('.change-name').hidden = !!me.name || !!me.accessEnabled;
+    $('.change-name').hidden = !!me.name || me.kind === 'none';
     $('.access-admin-link').hidden = me.kind !== 'admin' && !me.adminAvailable;
   }
   function renderMembers() {
@@ -65,10 +67,10 @@ export function createAccessRenderer({meOf, mixOf, refresh, status}) {
     const res = await fetch('/api/members'); if (!res.ok) throw new Error('Could not load members');
     draft = (await res.json()).map(({id,name,pages,mixes,link,url}) => ({id,name,pages,mixes,link,url})); loaded = true; renderMembers();
   }
-  $('.change-name').onclick = () => { dismissed = false; picker(); };
-  $('.name-dismiss').onclick = () => { dismissed = true; try { sessionStorage.setItem('st.pickerDismissed','1'); } catch (_) {} picker(); };
+  $('.change-name').onclick = () => { requested = true; picker(); };
+  $('.name-dismiss').onclick = () => { if (meOf().kind === 'none') return; requested = false; dismissed = true; try { localStorage.setItem('st.pickerDismissed','1'); } catch (_) {} picker(); };
   $('.member-logout').onclick = () => act(async () => {
-    await post('/api/forget',{}); try { sessionStorage.removeItem('st.pickerDismissed'); } catch (_) {} location.hash = ''; location.reload();
+    await post('/api/forget',{}); location.hash = ''; location.reload();
   });
   $('.admin-login-form').onsubmit = e => { e.preventDefault(); act(async () => {
     await post('/api/admin-login',{password:e.currentTarget.elements.password.value}); $('.admin-login-form').reset(); await refresh();

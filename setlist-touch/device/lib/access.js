@@ -32,10 +32,10 @@ function adminToken(cfg) { return {kind:'admin',v:adminVersion(cfg),exp:Date.now
 const MEMBER_AGE = 86400000;
 function memberToken(member, now = Date.now()) { return {kind:'member',memberId:member.id,exp:now + MEMBER_AGE}; }
 function slugFor(name) { return name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
-function reservedSlug(slug) {
-  const routes = ['', 'admin','api','js','css','fonts','settings','diagnostic','touch-test'];
-  return routes.includes(slug) || require('fs').readdirSync(require('path').join(__dirname,'../web')).some(name => name === slug || slugFor(name) === slug);
-}
+// Device web assets are static for the lifetime of this server process.
+const reservedStaticSlugs = new Set(require('fs').readdirSync(require('path').join(__dirname,'../web')).flatMap(name => [name,slugFor(name)]));
+const reservedRoutes = new Set(['', 'admin','api','js','css','fonts','settings','diagnostic','touch-test']);
+function reservedSlug(slug) { return reservedRoutes.has(slug) || reservedStaticSlugs.has(slug); }
 function validSlugs(members) {
   const slugs = members.map(m => slugFor(m.name));
   return slugs.every(s => !reservedSlug(s)) && new Set(slugs).size === slugs.length;

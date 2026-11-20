@@ -14,7 +14,7 @@ let me = {kind:local ? 'admin' : 'none',accessEnabled:!local,pages:local ? ['mon
 const apiFetch = window.fetch ? window.fetch.bind(window) : fetch;
 async function accessFetch(url, options) {
   const res = await apiFetch(url,options);
-  if (typeof url === 'string' && url.startsWith('/api/') && url !== '/api/me' && accessLoaded && (me.kind === 'member' || me.kind === 'open' && me.name)) await refreshMe();
+  if (res.status === 403 && typeof url === 'string' && url.startsWith('/api/') && url !== '/api/me' && accessLoaded && (me.kind === 'member' || me.kind === 'open' && me.name)) await refreshMe();
   return res;
 }
 if (window.fetch) window.fetch = accessFetch;

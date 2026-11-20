@@ -113,3 +113,10 @@ test('admin and open keep permissions with independent display identity',()=>{
  const id=identify({cookie:who},{...cfg,accessEnabled:false});a.equal(id.kind,'open');a.equal(meFor(id,cfg).name,'Alex');a.equal(meFor(id,cfg).link,'/alex');
  a.equal(identify({cookie:who},cfg).kind,'none');
 });
+
+test('reserved static slugs use cached web listing after module startup',()=>{
+ const {reservedSlug}=require('../device/lib/access'),read=fs.readdirSync;
+ fs.readdirSync=()=>{throw Error('Unexpected directory read after startup');};
+ try {for(const slug of ['style.css','style-css','index.html','index-html','js'])a.equal(reservedSlug(slug),true);a.equal(reservedSlug('keith-ray'),false);}
+ finally {fs.readdirSync=read;}
+});

@@ -24,7 +24,7 @@ import * as monitorView from '../device/web/js/monitor-view.js';
 import * as viewState from '../device/web/js/view-state.js';
 import * as mixView from '../device/web/js/mix-view.js';
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
-function shellHarness({local=false,prefs={page:'mix',tab:'Keith'},config={}}={}) {
+function shellHarness({local=false,prefs={page:'mix',tab:'Keith'},config={},apiStatus=200}={}) {
  const nodes=new Map(), pending=[], posts=[], storage=[], counters={cancel:0,render:0};
  function target() {const handlers=new Map();return {addEventListener(type,fn){handlers.set(type,fn);},emit(type,event={}){return handlers.get(type)?.(event);}};}
  function node() {return {...target(),hidden:false,textContent:'',dataset:{},style:{},setAttribute(){},classList:{add(){},remove(){}}};}
@@ -44,9 +44,10 @@ function shellHarness({local=false,prefs={page:'mix',tab:'Keith'},config={}}={})
   importModule:async name=>name.includes('access-view')?{allowedPages,pageFor,allowedTabs,showPicker}:name.includes('access-render')?{createAccessRenderer:()=>({render(){},invalidate(){}})}:{createMonitorRenderer:()=>({render(){},setActive(){}})},
   fetch:(url,options)=>{
    if(url==='/api/me')return new Promise(resolve=>pending.push(me=>resolve({ok:true,json:async()=>me})));
-   if(options){posts.push(JSON.parse(options.body));return Promise.resolve({ok:true});}
+   if(options){posts.push(JSON.parse(options.body));return Promise.resolve({ok:apiStatus<400,status:apiStatus});}
    return Promise.resolve({ok:true,json:async()=>({port:5290,username:'band',hasPassword:true,accessEnabled:false,...config})});
   }};
+ ctx.window.fetch=ctx.fetch;
  const app=fs.readFileSync(new URL('../device/web/js/app.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('import(', 'importModule(');
  vm.runInNewContext(app+'\nglobalThis.hooks={shell,dispatch,acceptMix,refreshMe,settings,get me(){return me;},get tab(){return mixState.tab;},get page(){return state.page;}};',ctx);
  return {events,ctx,get,form,location,pending,posts,storage,counters,full,hooks:ctx.hooks};
@@ -144,11 +145,20 @@ test('timing form displays fallback refusal and nonfatal name warnings from resu
  a.match(h.get('.timing-status').textContent,/Build complete/);a.match(h.get('.timing-status').textContent,/Warning: 2 clip name/);
 });
 
-test('picker required without name when access on, optional once when off',()=>{
- a.equal(showPicker({kind:'admin',accessEnabled:true,name:null}),true);
- a.equal(showPicker({kind:'open',accessEnabled:false,members:[{name:'Alex'}]},false),true);
- a.equal(showPicker({kind:'open',accessEnabled:false,members:[{name:'Alex'}]},true),false);
+for (const kind of ['admin','open']) test(`${kind} picker is optional even with access enabled`,()=>{
+ const me={kind,accessEnabled:true,name:null,members:[{name:'Alex'}]};
+ a.equal(showPicker(me,false),true);a.equal(showPicker(me,true),false);
+});
+test('none picker is required despite prior dismissal',()=>{
+ a.equal(showPicker({kind:'none',accessEnabled:true,name:null,members:[]},true),true);
  a.equal(showPicker({kind:'member',accessEnabled:true,name:'Alex'}),false);
+});
+for(const apiStatus of [200,403])test(`API ${apiStatus} ${apiStatus===403?'refreshes':'does not refresh'} identity`,async()=>{
+ const h=shellHarness({apiStatus});await flush();h.pending.shift()({...mixMember,name:'Keith'});await flush();
+ const request=h.ctx.window.fetch('/api/send',{method:'POST',body:'{}'});await flush();
+ a.equal(h.pending.length,apiStatus===403?1:0);
+ if(apiStatus===403)h.pending.shift()({...mixMember,kind:'none',name:null,mixes:[]});
+ await request;if(apiStatus===403)a.equal(h.hooks.me.kind,'none');
 });
 
 test('Monitor launch uses the drawn name even when the current set has renamed it',async()=>{

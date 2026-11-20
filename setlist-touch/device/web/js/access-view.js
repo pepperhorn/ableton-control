@@ -5,4 +5,4 @@ export function allowedPages(me, mix = null) {
 }
 export function pageFor(page, me, mix = null) { const pages = allowedPages(me,mix); return pages.includes(page) ? page : pages[0]; }
 export function allowedTabs(mix, me) { return mix.returns.filter(r => me.mixes === 'all' || me.mixes.includes(r.name)); }
-export function showPicker(me, dismissed = false) { return !me.name && (me.accessEnabled || me.kind === 'none' || (!dismissed && me.members?.length > 0)); }
+export function showPicker(me, dismissed = false, {local = false, requested = false} = {}) { return !me.name && (me.kind === 'none' || requested || (!local && !dismissed && me.members?.length > 0)); }

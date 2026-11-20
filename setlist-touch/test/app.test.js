@@ -594,3 +594,12 @@ test('laptop logout clears a member st_id while retaining loopback admin authori
  const me=JSON.parse((await req(h.port,'/api/me',undefined,{Cookie})).data);a.equal(me.kind,'admin');a.equal(me.name,'Keith Ray');
  const res=await req(h.port,'/api/forget',{}, {Cookie});a.equal(res.headers['set-cookie'].length,2);a.match(res.headers['set-cookie'][0],/^st_id=;.*Max-Age=0/);
 });
+
+test('slug failure after Live adds player reports link error and preserves existing config',async t=>{
+ const members=[{id:'one',name:' Keith ',pages:['monitor'],mixes:[]},{id:'two',name:'Keith',pages:['monitor'],mixes:[]}];
+ const h=await identitySetup(t,{members});h.laptop();let added=0;
+ h.bridge.playerOutputs=async()=>({ok:true,outputs:{returns:[]}});
+ h.bridge.addPlayer=async()=>{added++;return {ok:true,returnName:'D-Keith'};};
+ const res=await req(h.port,'/api/players',{...playerBody,name:'Keith'});
+ a.equal(added,1);a.equal(res.status,409);a.equal(res.data,"That name can't be used for a link; return remains in Live");a.deepEqual(h.app.getConfig().members,members);
+});

@@ -292,7 +292,8 @@ function createApp({bridge, config = loadConfig(), saveConfig = persist,
             if (!member) { member = newMember(value.name,[]); members.push(member); }
             member.name = member.name.trim();
             if (!member.mixes.includes(result.returnName)) member.mixes.push(result.returnName);
-            if (!validMembers(members) || !validSlugs(members)) return reply(res,409,'Member limit reached; return remains in Live');
+            if (!validMembers(members)) return reply(res,409,'Member limit reached; return remains in Live');
+            if (!validSlugs(members)) return reply(res,409,"That name can't be used for a link; return remains in Live");
             const next = {...cfg,members,accessEnabled:cfg.accessEnabled || cfg.members.length === 0};
             await saveConfig(next); cfg = next; broadcast('access',null); return json(res,{returnName:result.returnName,routeKept:result.routeKept === true});
           } catch (e) { return reply(res,409,e.message.replace(/[.\s]+$/g,'') + '. No member was added. Check the return in Live.'); }
