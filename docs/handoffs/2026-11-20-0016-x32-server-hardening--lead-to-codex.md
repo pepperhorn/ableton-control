@@ -5,7 +5,7 @@
 - **Ledger:** 0016 · **Spec:** none (quick lane; context: docs/superpowers/specs/2026-11-19-x32-mixes-design.md)
 - **Branch:** orch/0016-x32-server-hardening · **Worktree:** created by T3
 - **Base commit:** 8790c29cb8ebf00d0671af53cc671e06a048e83b
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 Fix four small server issues from the PR #15 review (`gh pr view 15 --repo pepperhorn/ableton-control --comments`):
@@ -37,6 +37,8 @@ cd setlist-touch && PATH=/home/shaun/.nvm/versions/node/v22.22.1/bin:$PATH npm t
 
 ---
 ## Receiver ack
+
+Codex acknowledges 2026-11-20: fix UDP socket error handling before bind, cache filtered desk state per change and permission set, reject leading-zero IPv4 octets, and allow identified members to save hidden lists for visible buses while access is off. Preserve the 0015-t4 API shapes, edit only owned server/test files and these handoffs, add regressions for all four items, run the full suite, then push this branch and open a draft PR. No blocking questions. GBrain search returned partial unrelated results; repo docs govern. Base 8790c29 is an ancestor of starting HEAD ac69fed.
 
 ---
 ## Return

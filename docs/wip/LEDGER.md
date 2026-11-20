@@ -11,12 +11,12 @@ Next ID: 0017
 
 | K | Title | Status | Waiting on | Owner (provider/model) | Branch | PR | Worktree | T3 task/thread | Spec | Plan | Latest handoff | Updated |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0016 | [quick] X32 server hardening | https://github.com/pepperhorn/ableton-control/pull/16 | 2026-11-20 (squash of reviewed 681d369) | Opus approved r1; 395 tests. Merged under the user's "Go. Build it" for 0015 (214 lines > auto-merge limit). |
 | 0015-t4 | X32 in the server | https://github.com/pepperhorn/ableton-control/pull/15 | 2026-11-20 (8790c29, squash of reviewed 74c4f62) | Opus approved r1; 391 tests on main. Review suggestions → 0016. Verify on real X32: writes land on the right bus, nothing reaches Main LR. |
 | 0015-t3 | Identity, personal links, optional password | https://github.com/pepperhorn/ableton-control/pull/14 | 2026-11-20 (e0df6a8, squash of reviewed 43c1ef6) | Opus approved r2; 379 tests on main. Follow-ups: watch-only member sees picker only after next 403/SSE reconnect; empty picker for admin with no members. Verify: personal links on phones, Log out, allowOpenLan. |
 | 0015-t1 | X32 OSC client and fake desk | https://github.com/pepperhorn/ableton-control/pull/12 | 2026-11-20 (9eec46a, squash of reviewed ce375bf) | Opus approved r2; 348 tests on main. Follow-ups: duplicate level events when desk echoes (dedupe in t4); lost read-back leaves snapshot stale until next write. Verify on real X32: return handoff desk checks. |
 | 0015-t2 | Scene window, Monitor launch, scene bar | https://github.com/pepperhorn/ableton-control/pull/13 | 2026-11-20 (109d71c, squash of reviewed 5370bc2) | Opus approved r1; 319 tests on main. Follow-ups (a) scene bar fit at 390px, (b) Monitor launch sends drawn name → folded into t3. Verify in Live: Monitor launch, lock default, scene colours/bar counts. |
-| 0015-t5 | X32 mix page and admin UI | dispatched | lead: delegate | codex/gpt-6.1-sol | orch/0015-t5-x32-ui | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t5-x32-ui--lead-to-codex.md | 2026-11-20 |
-| 0016 | [quick] X32 server hardening (UDP error listener, snapshot copy cost, IPv4 leading zeros, hidden lists with access off) | dispatched | lead: delegate | codex/gpt-6.1-sol | orch/0016-x32-server-hardening | — | — | — | — | — | docs/handoffs/2026-11-20-0016-x32-server-hardening--lead-to-codex.md | 2026-11-20 |
+| 0015-t5 | X32 mix page and admin UI | changes-requested | child 0015-t5 r2 | codex/gpt-6.1-sol | orch/0015-t5-x32-ui | https://github.com/pepperhorn/ableton-control/pull/17 | /home/shaun/.t3/worktrees/m4l-control/t3-a2f66848-56979bcc41e3043c | thread:delegated-task:command%3Amcp%3A58eb2ed2-3545-4823-9930-8558c9ab7b21%3Adelegate-task%3A0015-t5-impl-r1 | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t5-x32-ui--lead-to-codex.md | 2026-11-20 |
 | 0012 | Review follow-ups: 0011 (stale form can link an alias without naming it first; case-only name difference creates a near-duplicate return); 0006 (Build before track found shows wrong message, lom.js:347; build tick reads track list twice, lom.js:372) | proposed | human: not prioritised yet | — | — | — | — | — | — | — | — | 2026-11-02 |
 | 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | human: on hold (phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
 
@@ -47,12 +47,17 @@ Next ID: 0017
 | S4 | improvement | Mix page shares the Monitor lock, so checking Monitor leaves faders locked on return; consider a separate lock for the mix page | PR #13 r1 review | S | Medium | Opus 0015-t2 r1 | new (ask user) |
 | S5 | efficiency | Skip level events when value unchanged (desk echo + read-back give duplicates) — fold into 0015-t4 | PR #12 r2 review, x32.js | S | Low | Opus 0015-t1 r2 | accepted → 0015-t4 |
 | S6 | improvement | Warn admin about existing members whose names already clash as links (old configs) | PR #14 r1 review | S | Low | Opus 0015-t3 r1 | new |
+| S7 | improvement | Show UDP bind failure in X32 status (now Max console only; /api/x32 stays "searching"); reject leading-zero host in config.validHost too; keep cached X32 levels fresh in Ableton mode | PR #16 r1 review | S | Medium | Opus 0016 r1 | new |
 | S2 | improvement | Plainer startup note instead of raw errno text (`listen EACCES…`) | PR #10 r3 review | S | Low | Opus r3 | new |
 
 Last health scan: never
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-11-20 0015-t5 in-review→changes-requested — Opus r1 approve on e03be97 with 3 lows; lead fixing before merge (wrong banner on X32 loss, wrong tab text, Ableton drag cancelled by X32 events); resumed Sol
+2026-11-20 0016 in-review→merged — PR #16; 395 tests
+2026-11-20 0015-t5 dispatched→in-review — PR #17 head e03be97, 403 tests; Opus review r1
+2026-11-20 0016 dispatched→in-review — PR #16 head 681d369, 395 tests; Opus review r1
 2026-11-20 0016 →dispatched — quick: PR #15 review suggestions; parallel with 0015-t5 (disjoint files)
 2026-11-20 0015-t5 planned→dispatched — t4 merged
 2026-11-20 0015-t4 in-review→merged — PR #15 8790c29; 391 tests on main
