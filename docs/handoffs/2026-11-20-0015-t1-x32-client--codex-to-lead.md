@@ -8,7 +8,7 @@
 - **Dispatch:** [scope and receiver ack](2026-11-20-0015-t1-x32-client--lead-to-codex.md)
 - **Branch:** orch/0015-t1-x32-client
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-22cae3b8-50cbef180f1f5202
-- **PR:** draft opened after this handoff commit; linked from the implementation report.
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/12 (draft)
 - **Base commit:** fc1fe8de0a6dc92f2c6eb30c086d371c159ef7d5 (contains dispatch base 57df4758d8d47c80d3385da4657ada04960f2548)
 - **Implementation commit:** c0849a0499383e519d9b942144a2221efebedb8d
 - **Port:** no application server started; UDP test uses ephemeral loopback ports.
