@@ -13,7 +13,7 @@ Next ID: 0016
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 0015-t1 | X32 OSC client and fake desk | https://github.com/pepperhorn/ableton-control/pull/12 | 2026-11-20 (9eec46a, squash of reviewed ce375bf) | Opus approved r2; 348 tests on main. Follow-ups: duplicate level events when desk echoes (dedupe in t4); lost read-back leaves snapshot stale until next write. Verify on real X32: return handoff desk checks. |
 | 0015-t2 | Scene window, Monitor launch, scene bar | https://github.com/pepperhorn/ableton-control/pull/13 | 2026-11-20 (109d71c, squash of reviewed 5370bc2) | Opus approved r1; 319 tests on main. Follow-ups (a) scene bar fit at 390px, (b) Monitor launch sends drawn name → folded into t3. Verify in Live: Monitor launch, lock default, scene colours/bar counts. |
-| 0015-t3 | Identity, personal links, optional password | changes-requested | child 0015-t3 r2 | codex/gpt-6.1-sol | orch/0015-t3-identity | https://github.com/pepperhorn/ableton-control/pull/14 | /home/shaun/.t3/worktrees/m4l-control/t3-a5b5ea0c-86ffa607eeb1ba70 | thread:delegated-task:command%3Amcp%3A10f8f373-2001-4e17-beff-46f7a8a8d6c6%3Adelegate-task%3A0015-t3-impl-r1 | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t3-identity--lead-to-codex.md | 2026-11-20 |
+| 0015-t3 | Identity, personal links, optional password | in-review | review 0015-t3-review-r2 | codex/gpt-6.1-sol | orch/0015-t3-identity | https://github.com/pepperhorn/ableton-control/pull/14 | /home/shaun/.t3/worktrees/m4l-control/t3-a5b5ea0c-86ffa607eeb1ba70 | thread:delegated-task:command%3Amcp%3A10f8f373-2001-4e17-beff-46f7a8a8d6c6%3Adelegate-task%3A0015-t3-impl-r1 | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t3-identity--lead-to-codex.md | 2026-11-20 |
 | 0015-t4 | X32 in the server | planned | deps: t3 merge | codex/gpt-6.1-sol | orch/0015-t4-x32-server | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | — | 2026-11-20 |
 | 0015-t5 | X32 mix page and admin UI | planned | deps: t4 merges | codex/gpt-6.1-sol | orch/0015-t5-x32-ui | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | — | 2026-11-20 |
 | 0012 | Review follow-ups: 0011 (stale form can link an alias without naming it first; case-only name difference creates a near-duplicate return); 0006 (Build before track found shows wrong message, lom.js:347; build tick reads track list twice, lom.js:372) | proposed | human: not prioritised yet | — | — | — | — | — | — | — | — | 2026-11-02 |
@@ -52,6 +52,7 @@ Last health scan: never
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-11-20 0015-t3 changes-requested→in-review — r2 head 43c1ef6, 350 tests; Opus review r2
 2026-11-20 0015-t3 in-review→changes-requested — Opus r1 on 6b3bc68: undismissable name picker for admin incl. laptop/jweb (medium); wrong error on slug failure after add-player; security focus all OK; resumed Sol
 2026-11-20 0015-t3 dispatched→in-review — PR #14 head 6b3bc68, 336 tests; Opus review r1
 2026-11-20 0015-t1 in-review→merged — PR #12 9eec46a; 348 tests on main; GBrain: pending write-back
