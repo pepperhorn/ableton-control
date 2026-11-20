@@ -5,12 +5,17 @@
 > Waiting on: `child <taskId>` · `review <taskId>` · `ci` · `human: <why>` · `lead: <next action>`. Set it on every status change. A row needs the lead when it starts with `lead`, or when it's empty and Status is dispatched, in-review, changes-requested, ready, or merged. The lead's Stop hook won't let the lead end its turn while any row needs it.
 > Type: normal items have a spec and plan. Quick items have the title prefix `[quick]` (no spec or plan, a short handoff). PRs adopted by `orch-sweep` have the prefix `[pr]`.
 
-Next ID: 0015
+Next ID: 0016
 
 ## Active
 
 | K | Title | Status | Waiting on | Owner (provider/model) | Branch | PR | Worktree | T3 task/thread | Spec | Plan | Latest handoff | Updated |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0015-t1 | X32 OSC client and fake desk | dispatched | lead: delegate | codex/gpt-6.1-sol | orch/0015-t1-x32-client | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t1-x32-client--lead-to-codex.md | 2026-11-20 |
+| 0015-t2 | Scene window, Monitor launch, scene bar | dispatched | lead: delegate | codex/gpt-6.1-sol | orch/0015-t2-scene-window | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t2-scene-window--lead-to-codex.md | 2026-11-20 |
+| 0015-t3 | Identity, personal links, optional password | planned | lead: dispatch after t2 merges | codex/gpt-6.1-sol | orch/0015-t3-identity | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | — | 2026-11-20 |
+| 0015-t4 | X32 in the server | planned | lead: dispatch after t1+t3 merge | codex/gpt-6.1-sol | orch/0015-t4-x32-server | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | — | 2026-11-20 |
+| 0015-t5 | X32 mix page and admin UI | planned | lead: dispatch after t4 merges | codex/gpt-6.1-sol | orch/0015-t5-x32-ui | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | — | 2026-11-20 |
 | 0012 | Review follow-ups: 0011 (stale form can link an alias without naming it first; case-only name difference creates a near-duplicate return); 0006 (Build before track found shows wrong message, lom.js:347; build tick reads track list twice, lom.js:372) | proposed | human: not prioritised yet | — | — | — | — | — | — | — | — | 2026-11-02 |
 | 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | human: on hold (phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
 
@@ -43,6 +48,7 @@ Last health scan: never
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-11-20 0015 →planned; t1,t2 dispatched — user approved X32 design ("Go. Build it"); plan docs/plans/0015-x32-mixes.md, 5 tasks in 4 waves
 2026-11-04 0014 in-review→merged — PR #11; 307 tests on main; GBrain: pending write-back
 2026-11-04 0014 dispatched→in-review — PR #11 head bca8537, 307 tests; Opus review r1
 2026-11-04 0014 →dispatched — user: clicking the http link should copy it; Sol in worktree

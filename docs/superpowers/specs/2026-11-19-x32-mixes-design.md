@@ -1,6 +1,6 @@
 # X32 in-ear mixes, upcoming scenes and personal links (Setlist Touch)
 
-Date: 2026-11-19 · Status: draft for user approval (builder check done)
+Date: 2026-11-19 · Status: approved (user, 2026-11-20: "Go. Build it")
 Builds on: in-ear mix pages (0002), Monitor and band access (0008, 0009), add player (0011), port fallback and copy address (0013, 0014). All are merged under `setlist-touch/`.
 
 ## Intent
