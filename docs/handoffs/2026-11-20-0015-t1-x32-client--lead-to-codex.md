@@ -7,7 +7,7 @@
 - **PR:** (opened by implementer)
 - **Base commit:** 57df4758d8d47c80d3385da4657ada04960f2548
 - **Port (if running a server):** 5351
-- **Status:** open
+- **Status:** closed
 
 ## Goal
 Build the standalone X32 OSC client and a fake desk exactly to plan Task 1 interfaces. Nothing is wired into the server yet (that is Task 4). Done means every test listed in the plan task passes, the full suite passes, and a draft PR is open.
