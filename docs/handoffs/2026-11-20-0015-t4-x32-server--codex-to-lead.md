@@ -9,7 +9,7 @@
 - **Branch:** orch/0015-t4-x32-server
 - **Worktree:** /home/shaun/.t3/worktrees/m4l-control/t3-d5e11f0e-026c031a12ebe217
 - **Base commit:** c86eaa005e867d090e87c94d297203205553fd6c (contains required e0df6a8)
-- **PR:** draft PR for this branch against main; URL supplied in implementer return message
+- **PR:** https://github.com/pepperhorn/ableton-control/pull/15 (draft)
 - **Port:** 5354 (fake dev smoke completed; stopped)
 - **Status:** closed (implementation done, review pending)
 
