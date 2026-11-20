@@ -67,6 +67,8 @@ None.
 ---
 ## Receiver ack
 
+Codex: I will implement Task 4 server wiring, config migration, linked-bus permissions, hidden lists, fail-closed/coalesced X32 routes, SSE dedupe and fake dev mode within the owned files. Ableton returns and UI remain unchanged. I will run the named tests, full suite and device build, document exact API/SSE shapes, and open a draft PR. No open questions. Base ancestry and clean worktree verified.
+
 ---
 ## Return
 (write in …--codex-to-lead.md)
