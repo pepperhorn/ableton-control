@@ -14,7 +14,7 @@ Next ID: 0016
 | 0015-t3 | Identity, personal links, optional password | https://github.com/pepperhorn/ableton-control/pull/14 | 2026-11-20 (e0df6a8, squash of reviewed 43c1ef6) | Opus approved r2; 379 tests on main. Follow-ups: watch-only member sees picker only after next 403/SSE reconnect; empty picker for admin with no members. Verify: personal links on phones, Log out, allowOpenLan. |
 | 0015-t1 | X32 OSC client and fake desk | https://github.com/pepperhorn/ableton-control/pull/12 | 2026-11-20 (9eec46a, squash of reviewed ce375bf) | Opus approved r2; 348 tests on main. Follow-ups: duplicate level events when desk echoes (dedupe in t4); lost read-back leaves snapshot stale until next write. Verify on real X32: return handoff desk checks. |
 | 0015-t2 | Scene window, Monitor launch, scene bar | https://github.com/pepperhorn/ableton-control/pull/13 | 2026-11-20 (109d71c, squash of reviewed 5370bc2) | Opus approved r1; 319 tests on main. Follow-ups (a) scene bar fit at 390px, (b) Monitor launch sends drawn name → folded into t3. Verify in Live: Monitor launch, lock default, scene colours/bar counts. |
-| 0015-t4 | X32 in the server | dispatched | child 0015-t4-impl-r1 | codex/gpt-6.1-sol | orch/0015-t4-x32-server | — | — | thread:delegated-task:command%3Amcp%3A2ae12c18-1c3f-401f-a1b6-e2be99d06ae5%3Adelegate-task%3A0015-t4-impl-r1 | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t4-x32-server--lead-to-codex.md | 2026-11-20 |
+| 0015-t4 | X32 in the server | in-review | review 0015-t4-review-r1 | codex/gpt-6.1-sol | orch/0015-t4-x32-server | https://github.com/pepperhorn/ableton-control/pull/15 | /home/shaun/.t3/worktrees/m4l-control/t3-d5e11f0e-026c031a12ebe217 | thread:delegated-task:command%3Amcp%3A2ae12c18-1c3f-401f-a1b6-e2be99d06ae5%3Adelegate-task%3A0015-t4-impl-r1 | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | docs/handoffs/2026-11-20-0015-t4-x32-server--lead-to-codex.md | 2026-11-20 |
 | 0015-t5 | X32 mix page and admin UI | planned | deps: t4 merges | codex/gpt-6.1-sol | orch/0015-t5-x32-ui | — | — | — | docs/superpowers/specs/2026-11-19-x32-mixes-design.md | docs/plans/0015-x32-mixes.md | — | 2026-11-20 |
 | 0012 | Review follow-ups: 0011 (stale form can link an alias without naming it first; case-only name difference creates a near-duplicate return); 0006 (Build before track found shows wrong message, lom.js:347; build tick reads track list twice, lom.js:372) | proposed | human: not prioritised yet | — | — | — | — | — | — | — | — | 2026-11-02 |
 | 0004 | Footswitch / MIDI controller support (e.g. FCB1010): learn mode incl. Program Change; next/prev/relaunch relative to the playing song; respects lock | proposed (on hold, phones first) | human: on hold (phones first) | — | — | — | — | — | — | — | — | 2026-10-29 |
@@ -52,6 +52,7 @@ Last health scan: never
 
 ## Log
 <!-- One line per status change, newest first: YYYY-MM-DD NNNN old→new — note -->
+2026-11-20 0015-t4 dispatched→in-review — PR #15 head 74c4f62, 391 tests; Opus review r1
 2026-11-20 0015-t4 planned→dispatched — t1+t3 merged; includes S5 dedupe
 2026-11-20 0015-t3 in-review→merged — PR #14 e0df6a8; 379 tests on main
 2026-11-20 0015-t3 changes-requested→in-review — r2 head 43c1ef6, 350 tests; Opus review r2
